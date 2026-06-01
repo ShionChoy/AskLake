@@ -1,5 +1,6 @@
 # ─── Design / planning docs — keep LOCAL ONLY, never publish ───
 /docs/
+CLAUDE.md
 
 # ─── Secrets & environment ───
 .env
