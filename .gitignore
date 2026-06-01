@@ -1,0 +1,46 @@
+# ─── Design / planning docs — keep LOCAL ONLY, never publish ───
+/docs/
+
+# ─── Secrets & environment ───
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+.secrets/
+
+# ─── Raw / downloaded datasets & data-store volumes (never commit) ───
+/data/
+datasets/**/raw/
+datasets/**/*.tsv
+datasets/**/*.tsv.gz
+datasets/**/*.csv
+datasets/**/*.parquet
+*.tsv
+*.tsv.gz
+*.parquet
+warehouse/
+minio-data/
+neo4j-data/
+qdrant-data/
+*.duckdb
+
+# ─── Python ───
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+dist/
+build/
+
+# ─── Tooling / OS / IDE ───
+.DS_Store
+*.log
+.idea/
+.vscode/
