@@ -1,0 +1,29 @@
+services:
+  app:
+    build: .
+    profiles: ["core"]
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["core"]
+    environment:
+      POSTGRES_PASSWORD: asklake
+      POSTGRES_USER: asklake
+      POSTGRES_DB: asklake
+    ports:
+      - "5432:5432"
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    profiles: ["core"]
+    ports:
+      - "6333:6333"
