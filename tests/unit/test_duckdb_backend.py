@@ -47,3 +47,21 @@ def test_parquet_dir_registers_views(tmp_path):
     backend = DuckDBBackend(parquet_dir=str(tmp_path))
     result = backend.run_sql("SELECT COUNT(*) AS n FROM movies")
     assert result.rows[0][0] == 3
+
+
+def test_parquet_view_name_sanitizes_dots_and_hyphens(tmp_path):
+    """Stems like 'title.basics' or 'my-table' must be sanitized to underscores.
+
+    DuckDB interprets 'title.basics' as schema.table in unquoted DDL,
+    and hyphens cause a parser error.  The backend must sanitize and quote
+    the view name so the file is accessible as e.g. 'title_basics'.
+    """
+    seed = DuckDBBackend()
+    seed.setup(SEED_SQL)
+    # Use a dotted stem that mirrors the real IMDb file name title.basics.parquet
+    pq = tmp_path / "title.basics.parquet"
+    seed.run_sql(f"COPY movies TO '{pq}' (FORMAT PARQUET)")
+    backend = DuckDBBackend(parquet_dir=str(tmp_path))
+    # The sanitized view name must be queryable
+    result = backend.run_sql("SELECT COUNT(*) AS n FROM title_basics")
+    assert result.rows[0][0] == 3

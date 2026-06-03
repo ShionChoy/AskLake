@@ -1,6 +1,7 @@
 # engine/lakehouse/duckdb_backend.py
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -29,11 +30,14 @@ class DuckDBBackend:
         self._con = duckdb.connect(database)
         if parquet_dir:
             for pq in sorted(Path(parquet_dir).glob("*.parquet")):
-                view = pq.stem
+                # Sanitize stem: replace any non-word character (dots, hyphens, spaces)
+                # with underscores so that e.g. "title.basics" → "title_basics".
+                # Quote the identifier in DDL to guard against residual special chars.
+                view = re.sub(r"\W", "_", pq.stem)
                 # Parameter binding is not supported in CREATE VIEW DDL in DuckDB 1.5.x;
                 # the path is a local filesystem path under our control (no injection risk).
                 self._con.execute(
-                    f"CREATE OR REPLACE VIEW {view} AS SELECT * FROM read_parquet('{pq}')"
+                    f"CREATE OR REPLACE VIEW \"{view}\" AS SELECT * FROM read_parquet('{pq}')"
                 )
 
     def setup(self, sql: str) -> None:
