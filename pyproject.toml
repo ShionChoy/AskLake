@@ -11,6 +11,8 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.5",
     "requests>=2.32",
+    "langgraph>=0.2",
+    "anthropic>=0.40",
 ]
 
 [dependency-groups]
