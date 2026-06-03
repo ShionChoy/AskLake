@@ -13,14 +13,17 @@ uv sync
 make demo-p0
 # Expected output: columns + 2 rows (Interstellar, Tenet) + "demo-p0 OK"
 
-# 3. Start the full core stack (requires Docker)
+# 3. Copy the env template (edit values as needed)
+cp .env.example .env
+
+# 4. Start the full core stack (requires Docker)
 make dev       # docker compose --profile core up
 # Services: FastAPI app on :8000, Postgres on :5432, Qdrant on :6333
 
-# 4. Download raw datasets into ./data (gitignored)
+# 5. Download raw datasets into ./data (gitignored)
 bash scripts/download_data.sh
 
-# 5. Lint + test
+# 6. Lint + test
 make lint
 make test
 ```
