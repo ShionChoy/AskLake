@@ -66,6 +66,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "requests" },
     { name = "streamlit" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -83,6 +84,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.5" },
+    { name = "requests", specifier = ">=2.32" },
     { name = "streamlit", specifier = ">=1.39" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]

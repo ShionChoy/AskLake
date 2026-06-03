@@ -10,6 +10,7 @@ dependencies = [
     "streamlit>=1.39",
     "pydantic>=2.9",
     "pydantic-settings>=2.5",
+    "requests>=2.32",
 ]
 
 [dependency-groups]
