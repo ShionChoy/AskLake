@@ -35,3 +35,13 @@ def test_sql_path_degrades_gracefully_on_bad_sql():
 
 def test_infer_chart_spec_none_when_no_numeric_measure():
     assert infer_chart_spec(QueryResult(["a", "b"], [("x", "y")])) is None
+
+
+def test_sql_path_handles_empty_sql():
+    rr = _make_path("").run("nothing")
+    assert rr.result is None
+    assert "no query" in rr.narrative.lower()
+
+
+def test_infer_chart_spec_none_for_bool_measure():
+    assert infer_chart_spec(QueryResult(["a", "b"], [("x", True)])) is None

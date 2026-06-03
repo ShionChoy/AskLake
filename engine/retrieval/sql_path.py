@@ -41,6 +41,14 @@ class SqlPath:
     def run(self, question: str) -> RetrievalResult:
         state = self._graph.invoke({"question": question})
         sql = state.get("sql", "")
+        if not sql:
+            return RetrievalResult(
+                path=self.name,
+                sql=sql,
+                result=None,
+                narrative="SQL generation produced no query.",
+                chart_spec=None,
+            )
         try:
             safe_sql = self._gov.before_query(sql, role=self._role)
             result = self._backend.run_sql(safe_sql)
