@@ -21,5 +21,9 @@ jobs:
           uv run ruff format --check .
       - name: Tests (unit + smoke)
         run: uv run pytest -v
+      - name: Demos (hermetic)
+        run: |
+          make demo-p0
+          make demo-p1
       - name: Validate compose
         run: docker compose --profile core config
