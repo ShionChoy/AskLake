@@ -1,9 +1,7 @@
-from engine.ports.storage import StorageBackend, QueryResult, TableSchema, ColumnSchema
-from engine.ports.llm import LLMProvider
-from engine.ports.schema import SchemaProvider
-from engine.ports.retrieval import RetrievalPath, RetrievalResult
 from engine.ports.governance import GovernanceHook
-from engine.ports.observability import Observability
+from engine.ports.llm import LLMProvider
+from engine.ports.retrieval import RetrievalResult
+from engine.ports.storage import ColumnSchema, QueryResult, TableSchema
 
 
 def test_query_result_shape():
@@ -34,5 +32,11 @@ def test_protocols_are_runtime_checkable():
 
 
 def test_retrieval_result_shape():
-    rr = RetrievalResult(path="sql", sql="SELECT 1", result=QueryResult(["x"], [(1,)]), narrative="ok", chart_spec=None)
+    rr = RetrievalResult(
+        path="sql",
+        sql="SELECT 1",
+        result=QueryResult(["x"], [(1,)]),
+        narrative="ok",
+        chart_spec=None,
+    )
     assert rr.path == "sql"
