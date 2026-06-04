@@ -1,4 +1,4 @@
-.PHONY: dev lint test demo-p0 demo demo-p1 build-imdb
+.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 eval build-imdb
 
 dev:
 	docker compose --profile core up
@@ -20,3 +20,9 @@ demo-p1:
 
 build-imdb:
 	uv run python -c "import os; from datasets.imdb_cmu.source import build_parquet; build_parquet(os.environ.get('IMDB_RAW','data/imdb/raw'), os.environ.get('PARQUET_DIR','data/imdb/parquet'), int(os.environ.get('MIN_VOTES','1000')))"
+
+demo-p2:
+	uv run python demos/demo_p2.py
+
+eval:
+	uv run python -m eval.run
