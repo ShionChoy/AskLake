@@ -117,5 +117,30 @@ make demo-p3
 
 > **Headline numbers** (raw-schema agentic vs semantic-layer agentic over a real BIRD/Spider subset) — `TODO: paste real benchmark table`. Methodology + reproduction recipe live in `docs/eval.md` (local).
 
+## Phase 4: GraphRAG path + router fusion
+
+A second retrieval path — `GraphRagPath` — answers questions from a knowledge graph via **multi-hop retrieval with traceable citations**. The graph is built by an **LLM entity/relation extraction** adapter constrained by a per-dataset ontology (`datasets/imdb_cmu/graph/ontology.yaml`); the default store is a dependency-free `InMemoryGraphStore` (a `Neo4jGraphStore` slots behind the same `GraphStore` port later). `GraphRagPath` is an additive sibling of `SqlPath` — `SqlPath` is untouched.
+
+A `Router` scores a question's SQL-vs-graph features and dispatches to `SqlPath`, `GraphRagPath`, or **fuses both** via a deterministic `Synthesizer`. Structured (aggregation / filter) questions route to SQL; plot/theme questions route to the graph; cross-cutting questions trigger fusion. An LLM router/synthesizer can replace the heuristic implementations behind the same interfaces.
+
+- **2nd retrieval path** — `GraphRagPath`: multi-hop BFS over triples, each hop tagged with its source citation.
+- **Router + fusion** — heuristic `Router` (keyword + entity overlap) dispatches or fuses; `Synthesizer` concatenates the SQL table with the graph narrative.
+- **Additive** — `SqlPath`, `AgenticSqlPath`, `SemanticLayerProvider`, and `PolicyGovernance` are unchanged.
+
+### Run the hermetic Phase 4 demo (no API key, no Neo4j)
+
+```bash
+make demo-p4
+# "Nolan's highest-rated pre-2013 films and their common plot themes" → fusion:
+# SQL returns the ranked film table; graph returns shared themes (identity, dreams, chaos)
+# with [plot_*] citations reached by multi-hop from the director.  "demo-p4 OK"
+```
+
+### Evaluation
+
+`make eval` now prints a **third tier** — **routing accuracy** (does the Router pick the right path for sql / graph / fused questions?) plus an illustrative **graph-grounding lift** (a plot-theme question SQL alone cannot ground: 0 citations vs 1 cited theme from the graph). Same illustrative / real-numbers-TODO framing as Phases 2–3; full CMU-graph numbers come from the offline manual ingestion run (recipe in `docs/eval.md`).
+
+> **Headline numbers** (routing accuracy + citation precision over a real CMU plot corpus) — `TODO: paste real benchmark table`. Methodology + CMU ingestion recipe live in `docs/eval.md` (local).
+
 ## License
 Apache-2.0. IMDb data is non-commercial (not redistributed); CMU corpus is CC BY-SA.
