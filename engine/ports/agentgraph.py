@@ -13,3 +13,4 @@ class GraphState(TypedDict, total=False):
     error: str
     narrative: str
     chart_spec: dict
+    attempts: int
