@@ -5,6 +5,7 @@ into PARQUET_DIR). Unlike the hermetic MINI_CASES, these run against a shared pe
 backend, so `schema_sql` is unused (left empty) — eval.real_run loads the IMDb backend and
 scores candidate vs gold result sets on it. Gold SQL is validated to execute + return rows
 by tests/unit/test_imdb_gold.py when the parquet is present."""
+
 from __future__ import annotations
 
 from eval.harness import EvalCase
@@ -31,9 +32,7 @@ LIMIT 1
     EvalCase(
         name="most_voted_movies_top5",
         schema_sql="",
-        question=(
-            "What are the 5 movies with the most votes, ordered from most to fewest votes?"
-        ),
+        question=("What are the 5 movies with the most votes, ordered from most to fewest votes?"),
         gold_sql="""
 SELECT tb.primaryTitle, tr.numVotes
 FROM title_basics tb
@@ -76,9 +75,7 @@ ORDER BY tb.startYear
     EvalCase(
         name="top5_horror_movies_by_rating",
         schema_sql="",
-        question=(
-            "What are the top 5 highest-rated horror movies with at least 50,000 votes?"
-        ),
+        question=("What are the top 5 highest-rated horror movies with at least 50,000 votes?"),
         gold_sql="""
 SELECT tb.primaryTitle, tr.averageRating, tr.numVotes
 FROM title_basics tb
@@ -91,9 +88,7 @@ LIMIT 5
     EvalCase(
         name="top5_animation_movies_by_rating",
         schema_sql="",
-        question=(
-            "What are the top 5 highest-rated animation movies with at least 100,000 votes?"
-        ),
+        question=("What are the top 5 highest-rated animation movies with at least 100,000 votes?"),
         gold_sql="""
 SELECT tb.primaryTitle, tr.averageRating
 FROM title_basics tb
