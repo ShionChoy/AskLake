@@ -25,5 +25,8 @@ jobs:
         run: |
           make demo-p0
           make demo-p1
+          make demo-p2
+      - name: Eval (hermetic baseline vs agentic)
+        run: make eval
       - name: Validate compose
         run: docker compose --profile core config

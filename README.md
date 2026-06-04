@@ -64,5 +64,34 @@ make dev   # docker compose --profile core up → FastAPI on :8000
 
 **Data licenses:** IMDb is non-commercial (no redistribution); CMU is CC BY-SA.
 
+## Phase 2: Agentic self-correction + evaluation
+
+The NL→SQL path is now **agentic**: a cyclic LangGraph (`SQLWriter → Validator → SelfCorrect ≤N → … → END`) executes the generated SQL, and on failure feeds the error back to the model for a bounded number of correction attempts. `AgenticSqlPath` is an additive sibling of the Phase 1 `SqlPath` (the one-shot graph is kept as the evaluation baseline).
+
+**Example self-correction:** the model first writes `SELECT title, rating FROM movies …` (no such column); the validator's error (`Referenced column "rating" not found`) is fed back, and the corrected `SELECT title, averageRating FROM movies …` succeeds.
+
+### Run the hermetic Phase 2 demo (no API key)
+
+```bash
+make demo-p2
+# Shows one live self-correction (rating → averageRating) + the eval comparison table.
+```
+
+### Evaluation
+
+We quantify the agentic lift with an **Execution-Accuracy** harness (result-set multiset match vs a gold SQL):
+
+- **Execution Accuracy** — fraction of questions whose result set matches the gold query's;
+- **Valid-SQL Rate** — fraction whose SQL executes without error;
+- **avg self-corrections** — mean correction rounds per question.
+
+```bash
+make eval   # hermetic baseline-vs-agentic comparison, no API key
+```
+
+The committed `make eval` runs on a tiny **illustrative** hermetic fixture (3-case toy set) that demonstrates the harness and the self-correction mechanism: the single-prompt baseline scores 67% execution accuracy, the agentic self-correct loop scores 100%.
+
+> **Headline numbers** (baseline vs agentic over a real BIRD/Spider subset, run with a live LLM) — `TODO: paste real benchmark table`. Methodology + reproduction recipe live in `docs/eval.md` (local).
+
 ## License
 Apache-2.0. IMDb data is non-commercial (not redistributed); CMU corpus is CC BY-SA.
