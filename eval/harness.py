@@ -31,8 +31,15 @@ def _rows_match(a, b) -> bool:
 
 
 def score_case(candidate_sql: str, gold_sql: str, backend: StorageBackend) -> tuple[bool, bool]:
-    """Return (valid, correct): valid = candidate executes; correct = result multiset == gold's."""
-    gold = backend.run_sql(gold_sql)
+    """Return (valid, correct): valid = candidate executes; correct = result multiset == gold's.
+
+    A gold query that fails to execute is a malformed EvalCase (not a system-under-test result),
+    so it raises with the offending SQL rather than being silently scored as incorrect.
+    """
+    try:
+        gold = backend.run_sql(gold_sql)
+    except Exception as exc:  # noqa: BLE001 - a failing gold query means a malformed EvalCase
+        raise ValueError(f"gold SQL failed to execute: {gold_sql!r}: {exc}") from exc
     try:
         cand = backend.run_sql(candidate_sql)
     except Exception:  # noqa: BLE001 - an unexecutable candidate is simply invalid
@@ -45,15 +52,21 @@ def evaluate(
     cases: list[EvalCase],
     run_one: Callable[[EvalCase, StorageBackend], tuple[str, int]],
 ) -> SystemReport:
-    """Run `run_one(case, backend) -> (candidate_sql, attempts)` over cases; fresh DuckDB each."""
+    """Run `run_one(case, backend) -> (candidate_sql, attempts)` over cases; fresh DuckDB each.
+
+    Scoring uses a SEPARATE freshly-seeded backend per case so a system-under-test run cannot leak
+    state into scoring (the engine is SELECT-oriented, but this keeps the harness robust).
+    """
     n = len(cases)
     valid = correct = attempts_total = 0
     for case in cases:
-        backend = DuckDBBackend()
-        backend.setup(case.schema_sql)
-        candidate_sql, attempts = run_one(case, backend)
+        run_backend = DuckDBBackend()
+        run_backend.setup(case.schema_sql)
+        candidate_sql, attempts = run_one(case, run_backend)
         attempts_total += attempts
-        is_valid, is_correct = score_case(candidate_sql, case.gold_sql, backend)
+        score_backend = DuckDBBackend()
+        score_backend.setup(case.schema_sql)
+        is_valid, is_correct = score_case(candidate_sql, case.gold_sql, score_backend)
         valid += int(is_valid)
         correct += int(is_correct)
     return SystemReport(

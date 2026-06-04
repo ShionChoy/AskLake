@@ -1,3 +1,5 @@
+import pytest
+
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 from eval.harness import EvalCase, evaluate, score_case
 
@@ -32,3 +34,16 @@ def test_evaluate_aggregates():
     assert report.execution_accuracy == 1.0
     assert report.valid_sql_rate == 1.0
     assert report.avg_attempts == 0.0
+
+
+def test_score_case_empty_results_match():
+    # both gold and candidate return zero rows -> correct (empty multiset == empty multiset)
+    valid, correct = score_case(
+        "SELECT x FROM t WHERE x > 99", "SELECT x FROM t WHERE x > 50", _backend()
+    )
+    assert valid and correct
+
+
+def test_score_case_bad_gold_raises():
+    with pytest.raises(ValueError, match="gold SQL"):
+        score_case("SELECT x FROM t", "SELECT nope FROM t", _backend())
