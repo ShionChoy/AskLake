@@ -142,5 +142,23 @@ make demo-p4
 
 > **Headline numbers** (routing accuracy + citation precision over a real CMU plot corpus) — `TODO: paste real benchmark table`. Methodology + CMU ingestion recipe live in `docs/eval.md` (local).
 
+## Real headline run (IMDb, live LLM)
+
+`make eval-real` runs **all three systems** (baseline, agentic, semantic) over the hand-authored,
+validated real IMDb gold set (`eval/imdb_gold.py`, 12 questions) against a live LLM, printing
+execution-accuracy per system — the resume-grade numbers.
+
+```bash
+# Requires the built IMDb parquet (make build-imdb) and an API key:
+DEEPSEEK_API_KEY=<key>  make eval-real   # DeepSeekProvider (deepseek-chat, OpenAI-compatible)
+ANTHROPIC_API_KEY=<key> make eval-real   # falls back to AnthropicProvider
+```
+
+Provider is swappable via the `LLMProvider` port; the core `run_real_eval` function is
+hermetically tested (FakeLLMProvider + in-memory backend) so CI stays green without a key or data.
+
+> **Headline numbers** (baseline vs agentic vs semantic over the real IMDb gold set) —
+> `TODO: paste real eval-real numbers`. Methodology + reproduction recipe in `docs/eval.md`.
+
 ## License
 Apache-2.0. IMDb data is non-commercial (not redistributed); CMU corpus is CC BY-SA.
