@@ -26,6 +26,7 @@ jobs:
           make demo-p0
           make demo-p1
           make demo-p2
+          make demo-p3
       - name: Eval (hermetic baseline vs agentic)
         run: make eval
       - name: Validate compose

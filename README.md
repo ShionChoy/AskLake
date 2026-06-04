@@ -93,5 +93,29 @@ The committed `make eval` runs on a tiny **illustrative** hermetic fixture (3-ca
 
 > **Headline numbers** (baseline vs agentic over a real BIRD/Spider subset, run with a live LLM) — `TODO: paste real benchmark table`. Methodology + reproduction recipe live in `docs/eval.md` (local).
 
+## Phase 3: Semantic layer + governance
+
+The SQL path is now **grounded**: a `SemanticLayerProvider` supplies the LLM with curated table/column descriptions, metrics, synonyms (e.g. "score" → `averageRating`), and few-shot SQL examples, pruned to the question by a pluggable `SchemaRetriever` (in-process lexical now; Qdrant-backed later). It is an additive sibling of the bare `RawSchemaProvider` (kept as the eval baseline). Dataset semantics live in `datasets/imdb_cmu/semantic.yaml`.
+
+**Governance** — `PolicyGovernance` enforces `datasets/imdb_cmu/governance.yaml`:
+
+- **RBAC + PII masking** — e.g. `birthYear`/`deathYear` masked for the `public` role
+- **Row-level filtering** — e.g. `adult` titles hidden from `public`
+- **Query cost guardrail** — `before_query` blocks unbounded scans (no LIMIT) and non-SELECT writes, raising `GovernanceError`
+
+### Run the hermetic Phase 3 demo (no API key)
+
+```bash
+make demo-p3
+# Same question under `analyst` vs `public`: full vs masked+filtered rows,
+# then one cost-guardrail interception.
+```
+
+### Evaluation
+
+`make eval` now prints a **second comparison table** — bare schema vs semantic layer — illustrating the grounding lift (toy: 0% → 100% on a synonym case where the raw schema keeps emitting a non-existent `score` column). Same illustrative / real-numbers-TODO framing as Phase 2; headline numbers come from a manual real-LLM run.
+
+> **Headline numbers** (raw-schema agentic vs semantic-layer agentic over a real BIRD/Spider subset) — `TODO: paste real benchmark table`. Methodology + reproduction recipe live in `docs/eval.md` (local).
+
 ## License
 Apache-2.0. IMDb data is non-commercial (not redistributed); CMU corpus is CC BY-SA.
