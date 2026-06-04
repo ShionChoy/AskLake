@@ -1,4 +1,4 @@
-.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 eval build-imdb
+.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 eval build-imdb
 
 dev:
 	docker compose --profile core up
@@ -26,6 +26,9 @@ demo-p2:
 
 demo-p3:
 	uv run python demos/demo_p3.py
+
+demo-p4:
+	uv run python demos/demo_p4.py
 
 eval:
 	uv run python -m eval.run
