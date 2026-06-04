@@ -1,0 +1,10 @@
+# IMDb+CMU GraphRAG ontology (per-dataset config; the extraction engine reads this, hardcodes
+# nothing). Triples are extracted from CMU plot summaries; films join back to IMDb via the
+# entity-alignment crosswalk in the dataset connector (see docs/dataset.md).
+entity_types: [Film, Person, Theme, Character, Place]
+relation_types: [HAS_THEME, DIRECTED_BY, FEATURES_CHARACTER, SET_IN]
+hint: >
+  Use the film's title as the subject for film-level facts. Emit DIRECTED_BY -> director
+  (a person), HAS_THEME -> a short theme phrase (e.g. "memory", "identity", "time"),
+  FEATURES_CHARACTER -> a named character, and SET_IN -> a place or era. Prefer concise,
+  reusable theme labels so films sharing a theme connect in the graph.
