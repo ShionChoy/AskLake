@@ -1,0 +1,11 @@
+# IMDb governance policy (per-dataset config; PolicyGovernance enforces this).
+roles:
+  analyst: {pii: allow}   # internal role: full access
+  public:  {pii: mask}    # external role: PII masked, restricted rows hidden
+pii_columns: [birthYear, deathYear]
+row_filters:
+  public:
+    - {column: titleType, deny_values: [adult]}
+cost_guardrail:
+  require_limit: true     # reject unbounded scans (no LIMIT)
+  forbid_writes: true     # reject anything but a single read-only SELECT

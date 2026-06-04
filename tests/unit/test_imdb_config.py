@@ -1,0 +1,24 @@
+from pathlib import Path
+
+from engine.governance.policy import load_policy
+from engine.semantic.semantic_model import load_semantic_layer
+
+_ROOT = Path(__file__).resolve().parents[2]
+_SEMANTIC = _ROOT / "datasets" / "imdb_cmu" / "semantic.yaml"
+_GOV = _ROOT / "datasets" / "imdb_cmu" / "governance.yaml"
+
+
+def test_imdb_semantic_layer_parses():
+    layer = load_semantic_layer(_SEMANTIC)
+    names = {t.name for t in layer.tables}
+    assert {"title_basics", "title_ratings", "name_basics"} <= names
+    assert layer.synonyms.get("score") == "averageRating"
+    assert layer.few_shots  # at least one example
+
+
+def test_imdb_governance_policy_parses():
+    policy = load_policy(_GOV)
+    assert "birthYear" in policy.pii_columns
+    assert "public" in policy.mask_roles
+    assert policy.require_limit is True
+    assert policy.row_filters["public"][0].column == "titleType"

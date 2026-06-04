@@ -1,0 +1,53 @@
+# IMDb semantic layer (per-dataset config; the engine reads this, hardcodes nothing).
+tables:
+  - name: title_basics
+    description: One row per title; the working set is filtered to movies.
+    columns:
+      - {name: tconst, description: Title id; joins to title_ratings and title_crew.}
+      - {name: titleType, description: Kind of title, e.g. movie, short, tvSeries.}
+      - {name: primaryTitle, description: The film's display title.}
+      - {name: startYear, type: INTEGER, description: Release year.}
+      - {name: genres, description: Comma-separated genres, e.g. "Sci-Fi,Drama".}
+  - name: title_ratings
+    description: IMDb rating aggregates per title.
+    columns:
+      - {name: tconst, description: Title id; joins to title_basics.}
+      - {name: averageRating, type: DOUBLE, description: Weighted average user rating, 1-10.}
+      - {name: numVotes, type: INTEGER, description: Number of user votes (popularity).}
+  - name: name_basics
+    description: People (actors, directors, writers).
+    columns:
+      - {name: nconst, description: Person id.}
+      - {name: primaryName, description: Person's display name.}
+      - {name: birthYear, type: INTEGER, description: Year of birth (PII).}
+      - {name: deathYear, type: INTEGER, description: Year of death (PII).}
+  - name: title_crew
+    description: Directors and writers per title.
+    columns:
+      - {name: tconst, description: Title id; joins to title_basics.}
+      - {name: directors, description: Comma-separated director person ids (nconst).}
+metrics:
+  - name: rating
+    expression: title_ratings.averageRating
+    description: Use averageRating for "rating"/"score"; use numVotes for popularity.
+synonyms:
+  score: averageRating
+  rating: averageRating
+  film: title_basics
+  movie: title_basics
+  votes: numVotes
+  popularity: numVotes
+few_shots:
+  - question: Highest-rated sci-fi films after 2010
+    sql: |
+      SELECT b.primaryTitle, r.averageRating
+      FROM title_basics b JOIN title_ratings r USING (tconst)
+      WHERE b.genres LIKE '%Sci-Fi%' AND b.startYear > 2010
+      ORDER BY r.averageRating DESC
+      LIMIT 10
+  - question: Most popular movies
+    sql: |
+      SELECT b.primaryTitle, r.numVotes
+      FROM title_basics b JOIN title_ratings r USING (tconst)
+      ORDER BY r.numVotes DESC
+      LIMIT 10
