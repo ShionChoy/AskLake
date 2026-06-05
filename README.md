@@ -142,6 +142,38 @@ make demo-p4
 
 > **Headline numbers** (routing accuracy + citation precision over a real CMU plot corpus) — `TODO: paste real benchmark table`. Methodology + CMU ingestion recipe live in `docs/eval.md` (local).
 
+## Phase 5: Observability (Prometheus) + productionization
+
+The last empty port — `Observability` — is now filled. `PrometheusObservability`
+(implements the `span`/`event` seam via an injected `prometheus_client` registry) records
+spans (with latency) and events. Two **decorator-adapters** — `ObservingLLMProvider` and
+`ObservingStorageBackend` — wrap the `LLMProvider` / `StorageBackend` ports to emit metrics
+**without touching any existing adapter** (additive port-and-adapter decoration). The
+default app stays no-op; Prometheus is opt-in via `ASKLAKE_OBSERVABILITY_BACKEND=prometheus`,
+which also exposes a `/metrics` endpoint in the Prometheus text exposition format.
+
+### Run the hermetic Phase 5 demo (no API key, no Docker, no live Prometheus)
+
+```bash
+make demo-p5
+# Runs the self-correction scenario through the instrumented adapters and prints the
+# collected metrics: 2 LLM calls (bad gen -> corrected gen), 1 caught sql_error, 2 storage
+# runs, plus a /metrics exposition excerpt.  "demo-p5 OK"
+```
+
+### Optional: live Prometheus + Grafana (offline / roomier box)
+
+The Prometheus/Grafana **servers** are memory-heavy and are not part of CI or any demo.
+Bring them up on demand (the app must be running under the `core` profile so `/metrics` is
+scraped):
+
+```bash
+docker compose --profile core --profile observability up
+# Prometheus on :9090, Grafana on :3000 (anonymous admin), dashboard "AskLake Observability".
+```
+
+`make demo` now runs the full chain `p0 -> p5` in sequence.
+
 ## Real headline run (IMDb, live LLM)
 
 `make eval-real` runs **all three systems** (baseline, agentic, semantic) over the hand-authored,
