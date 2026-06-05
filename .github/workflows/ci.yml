@@ -28,6 +28,7 @@ jobs:
           make demo-p2
           make demo-p3
           make demo-p4
+          make demo-p5
       - name: Eval (hermetic baseline vs agentic)
         run: make eval
       - name: Validate compose
