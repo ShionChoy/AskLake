@@ -33,3 +33,5 @@ jobs:
         run: make eval
       - name: Validate compose
         run: docker compose --profile core config
+      - name: Build app image
+        run: docker build -t asklake:ci .
