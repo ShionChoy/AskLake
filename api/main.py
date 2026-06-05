@@ -34,7 +34,13 @@ def create_app(
     if backend is None:
         backend = DuckDBBackend(parquet_dir=settings.parquet_dir)
     governance = governance or PassthroughGovernance()
-    observability = observability or NoopObservability()
+    if observability is None:
+        if settings.observability_backend == "prometheus":
+            from engine.observability.prometheus import PrometheusObservability
+
+            observability = PrometheusObservability()
+        else:
+            observability = NoopObservability()
 
     app = FastAPI(title="AskLake", version="0.0.0")
     app.state.backend = backend
@@ -80,5 +86,13 @@ def create_app(
             "chart_spec": rr.chart_spec,
             "narrative": rr.narrative,
         }
+
+    if hasattr(observability, "registry"):
+        from fastapi.responses import Response
+        from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+        @app.get("/metrics")
+        def metrics() -> Response:
+            return Response(generate_latest(observability.registry), media_type=CONTENT_TYPE_LATEST)
 
     return app
