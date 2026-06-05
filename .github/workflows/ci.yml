@@ -32,6 +32,8 @@ jobs:
       - name: Eval (hermetic baseline vs agentic)
         run: make eval
       - name: Validate compose
-        run: docker compose --profile core config
+        run: |
+          docker compose --profile core config
+          docker compose --profile observability config
       - name: Build app image
         run: docker build -t asklake:ci .
