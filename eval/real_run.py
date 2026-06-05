@@ -24,6 +24,23 @@ from eval.systems import run_agentic, run_baseline, run_semantic
 _SEMANTIC_YAML = "datasets/imdb_cmu/semantic.yaml"
 
 
+def apply_duckdb_guardrails(
+    backend, memory_limit: str = "2GB", max_temp_size: str = "4GB", threads: int = 2
+) -> None:
+    """Cap the eval backend's RAM + on-disk spill so a pathological candidate query fails fast
+    (catchable error) instead of exhausting the machine. Each SET is best-effort (older DuckDB
+    builds may not support every knob)."""
+    for stmt in (
+        f"SET memory_limit='{memory_limit}'",
+        f"SET max_temp_directory_size='{max_temp_size}'",
+        f"SET threads={threads}",
+    ):
+        try:
+            backend.run_sql(stmt)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def run_real_eval(
     llm: LLMProvider,
     backend: StorageBackend,
@@ -43,11 +60,19 @@ def run_real_eval(
         valid = correct = 0
         attempts_total = 0
         for case in cases:
-            sql, attempts = runner(case)
-            attempts_total += attempts
-            v, ok = score_case(sql, case.gold_sql, backend)
+            sql = None
+            attempts = 0
+            v = ok = False
+            for _attempt in range(2):  # 1 try + 1 retry
+                try:
+                    sql, attempts = runner(case)
+                    v, ok = score_case(sql, case.gold_sql, backend)
+                    break
+                except Exception:  # noqa: BLE001
+                    sql, attempts, v, ok = None, 0, False, False
             valid += int(v)
             correct += int(ok)
+            attempts_total += attempts
         n = len(cases) or 1
         reports.append(
             SystemReport(
@@ -65,7 +90,9 @@ def _make_provider() -> LLMProvider:
     if os.environ.get("DEEPSEEK_API_KEY"):
         from engine.llm.deepseek_provider import DeepSeekProvider
 
-        return DeepSeekProvider(model=os.environ.get("ASKLAKE_DEEPSEEK_MODEL", "deepseek-chat"))
+        return DeepSeekProvider(
+            model=os.environ.get("ASKLAKE_DEEPSEEK_MODEL", "deepseek-chat"), timeout=120.0
+        )
     if os.environ.get("ANTHROPIC_API_KEY"):
         from engine.llm.anthropic_provider import AnthropicProvider
         from engine.settings import get_settings
@@ -84,6 +111,7 @@ def main() -> None:
             f"IMDb parquet not found at {PARQUET_DIR}. Build it first: make build-imdb"
         )
     backend = DuckDBBackend(parquet_dir=PARQUET_DIR)
+    apply_duckdb_guardrails(backend)
     layer = load_semantic_layer(_SEMANTIC_YAML)
     llm = _make_provider()
     reports = run_real_eval(llm, backend, IMDB_GOLD, layer)

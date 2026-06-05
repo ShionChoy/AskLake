@@ -39,3 +39,27 @@ def test_run_real_eval_returns_three_reports():
         assert r.n == 1
         assert r.execution_accuracy == 1.0
         assert r.valid_sql_rate == 1.0
+
+
+def test_run_real_eval_counts_failing_case_not_crash():
+    # An LLM whose every call raises must NOT abort the run: the case is counted as a failure
+    # (0% exec-acc) and three reports are still returned.
+    class _BoomLLM:
+        def complete(self, prompt, system=None):
+            raise RuntimeError("simulated LLM/network failure")
+
+    reports = run_real_eval(_BoomLLM(), _backend(), _CASES, SemanticLayer())
+    assert [r.name for r in reports] == ["baseline", "agentic", "semantic"]
+    for r in reports:
+        assert r.n == 1
+        assert r.execution_accuracy == 0.0
+        assert r.valid_sql_rate == 0.0
+
+
+def test_apply_duckdb_guardrails_runs_on_real_backend():
+    from eval.real_run import apply_duckdb_guardrails
+
+    b = _backend()
+    apply_duckdb_guardrails(b)  # must not raise
+    # backend still works after limits applied
+    assert b.run_sql("SELECT 1").rows == [(1,)]
