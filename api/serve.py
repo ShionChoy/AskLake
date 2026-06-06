@@ -19,15 +19,20 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from api.main import create_app
+from engine.graph.persistence import load_store
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 from engine.llm.factory import make_provider
 from engine.ports.llm import LLMProvider
 from engine.ports.storage import QueryResult, StorageBackend
 from engine.retrieval.agentic_sql_path import AgenticSqlPath
+from engine.retrieval.graph_rag_path import GraphRagPath
+from engine.retrieval.router import Router
+from engine.retrieval.synthesizer import Synthesizer
 from engine.semantic.semantic_layer import SemanticLayerProvider
 
 PARQUET_DIR = os.environ.get("ASKLAKE_PARQUET_DIR", "data/imdb/parquet")
 SEMANTIC_YAML = "datasets/imdb_cmu/semantic.yaml"
+GRAPH_PATH = os.environ.get("ASKLAKE_GRAPH_PATH", "data/imdb/graph/triples.jsonl")
 
 
 def apply_duckdb_guardrails(
@@ -136,7 +141,35 @@ class _TracingBackend:
         return self._inner.list_tables()
 
 
-def build_app(llm: LLMProvider | None = None, backend: StorageBackend | None = None) -> FastAPI:
+class _TracingGraphPath:
+    """Wraps GraphRagPath to record a trace step. The graph path makes no LLM call."""
+
+    name = "graph"
+
+    def __init__(self, inner, log: _TraceLog) -> None:
+        self._inner = inner
+        self._log = log
+
+    def can_handle(self, question: str) -> bool:
+        return self._inner.can_handle(question)
+
+    def run(self, question: str):
+        t0 = time.perf_counter()
+        rr = self._inner.run(question)
+        n = len(rr.result.rows) if rr.result else 0
+        self._log.add(
+            "Search knowledge graph",
+            ms=(time.perf_counter() - t0) * 1000,
+            detail=f"{n} fact(s) retrieved via multi-hop graph traversal",
+        )
+        return rr
+
+
+def build_app(
+    llm: LLMProvider | None = None,
+    backend: StorageBackend | None = None,
+    graph_store=None,
+) -> FastAPI:
     """Build the production app. Always serves /health, /query, /info and /ask_trace; the LLM is
     optional at boot — the browser can supply a provider/key per request (BYO key)."""
     if backend is None:
@@ -171,6 +204,39 @@ def build_app(llm: LLMProvider | None = None, backend: StorageBackend | None = N
     app.state.trace_log = log
     app.state.model_name = default_model
     app.state.provider_name = default_provider
+
+    # Optional knowledge graph: use an injected store (tests) or load the persisted triples.
+    if graph_store is None and Path(GRAPH_PATH).exists():
+        try:
+            graph_store = load_store(GRAPH_PATH)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[api.serve] failed to load graph at {GRAPH_PATH} ({exc}); graph disabled")
+            graph_store = None
+    graph_path = (
+        _TracingGraphPath(GraphRagPath(graph_store), log) if graph_store is not None else None
+    )
+    synth = Synthesizer()
+    # router.route() only scores the question — it never calls sql_path.run — so passing
+    # default_path (which may be None when there is no boot key) is safe. Execution below uses
+    # the per-request sql_runner from _resolve(), so a BYO key is honoured, not default_path.
+    router = Router(
+        default_path,
+        graph_path,
+        synth,
+        entity_vocab=graph_store.entities() if graph_store is not None else (),
+    )
+    app.state.graph_enabled = graph_path is not None
+
+    def _decide(requested: str, question: str):
+        """(paths, fuse): honor an explicit override, else the heuristic Router."""
+        if requested == "sql":
+            return ("sql",), False
+        if requested == "graph":
+            return ("graph",), False
+        if requested == "fusion":
+            return ("sql", "graph"), True
+        d = router.route(question)
+        return d.paths, d.fuse
 
     def _resolve(provider: str, model: str, api_key: str):
         """Return (path, effective_model) for this request, or (None, None) when no key is usable.
@@ -215,28 +281,55 @@ def build_app(llm: LLMProvider | None = None, backend: StorageBackend | None = N
     def ask_trace(payload: dict) -> dict:
         question = payload.get("question", "")
         api_key = (payload.get("api_key", "") or "").strip()
+        requested = (payload.get("path") or "auto").lower()
         # Single-user, local-first: the shared trace log is reset per request.
         log.reset()
-        try:
-            path, model = _resolve(payload.get("provider", ""), payload.get("model", ""), api_key)
-        except Exception as exc:  # noqa: BLE001
-            return _empty(
-                _redact(f"Could not initialize the model: {exc}", api_key),
-                payload.get("model", ""),
-            )
-        if path is None:
-            return _empty("Enter your API key in the sidebar to ask questions.")
+
+        paths, fuse = _decide(requested, question)
+        needs_graph = "graph" in paths
+        if needs_graph and graph_path is None:  # graph asked for but not built
+            if "sql" in paths:
+                paths, fuse, needs_graph = ("sql",), False, False
+            else:
+                return {
+                    **_empty(
+                        "The knowledge graph isn't built yet — run `make build-graph`, "
+                        "or ask a SQL-style question."
+                    ),
+                    "path": "graph",
+                }
+
+        needs_sql = "sql" in paths
+        sql_runner = None
+        model = ""
+        if needs_sql:
+            try:
+                sql_runner, model = _resolve(
+                    payload.get("provider", ""), payload.get("model", ""), api_key
+                )
+            except Exception as exc:  # noqa: BLE001
+                return _empty(
+                    _redact(f"Could not initialize the model: {exc}", api_key),
+                    payload.get("model", ""),
+                )
+            if sql_runner is None:
+                return _empty("Enter your API key in the sidebar to ask questions.")
+
         t0 = time.perf_counter()
         try:
             with app.state.observability.span("ask"):
-                rr = path.run(question)
+                if fuse:
+                    rr = synth.fuse(question, [sql_runner.run(question), graph_path.run(question)])
+                elif needs_graph:
+                    rr = graph_path.run(question)
+                else:
+                    rr = sql_runner.run(question)
         except Exception as exc:  # noqa: BLE001
             log.add("Model call failed", ok=False, detail=_redact(str(exc), api_key))
             return {
                 **_empty(
                     _redact(
-                        f"The model call failed: {exc}. Check your API key and model.",
-                        api_key,
+                        f"The model call failed: {exc}. Check your API key and model.", api_key
                     ),
                     model,
                 ),

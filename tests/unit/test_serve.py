@@ -1,8 +1,25 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from api.serve import build_app
+from engine.graph.store import InMemoryGraphStore
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 from engine.llm.fake import FakeLLMProvider
+from engine.ports.graph_store import Triple
+
+
+@pytest.fixture(autouse=True)
+def _no_disk_graph(monkeypatch, tmp_path):
+    # build_app reads the module global at call time; point it at a non-existent file so unit
+    # tests never auto-load a real graph that may have been built locally.
+    monkeypatch.setattr("api.serve.GRAPH_PATH", str(tmp_path / "no-graph.jsonl"))
+
+
+def _graph_store() -> InMemoryGraphStore:
+    s = InMemoryGraphStore()
+    s.add(Triple("The Dark Knight", "DIRECTED_BY", "Christopher Nolan", "cmu:1"))
+    s.add(Triple("The Dark Knight", "HAS_THEME", "identity", "cmu:1"))
+    return s
 
 
 def test_build_app_serves_grounded_trace():
@@ -106,3 +123,61 @@ def test_ask_trace_blank_key_treated_as_no_key(monkeypatch):
     ).json()
     # A blank key -> friendly prompt, NOT an attempted provider call / 401.
     assert "sidebar" in out["narrative"].lower()
+
+
+def test_ask_trace_graph_path_no_key(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ASKLAKE_LLM_PROVIDER", raising=False)
+    app = build_app(backend=DuckDBBackend(), graph_store=_graph_store())  # no LLM key at all
+    c = TestClient(app)
+    out = c.post(
+        "/ask_trace", json={"question": "themes of The Dark Knight", "path": "graph"}
+    ).json()
+    assert out["path"] == "graph"
+    assert out["columns"] == ["subject", "relation", "object", "source"]
+    assert any(row[2] == "identity" for row in out["rows"])  # object column carries the theme
+    assert any(s["step"] == "Search knowledge graph" for s in out["steps"])
+
+
+def test_ask_trace_fusion_merges_sql_and_graph():
+    app = build_app(
+        llm=FakeLLMProvider(["SELECT 1 AS x"]),
+        backend=DuckDBBackend(),
+        graph_store=_graph_store(),
+    )
+    c = TestClient(app)
+    out = c.post(
+        "/ask_trace", json={"question": "The Dark Knight rating and themes", "path": "fusion"}
+    ).json()
+    assert "sql" in out["path"] and "graph" in out["path"]  # "sql+graph"
+    assert "[graph]" in out["narrative"]
+    assert out["rows"] == [[1]]  # SQL table is the primary result
+
+
+def test_ask_trace_sql_override_forces_sql():
+    app = build_app(
+        llm=FakeLLMProvider(["SELECT 7 AS x"]),
+        backend=DuckDBBackend(),
+        graph_store=_graph_store(),
+    )
+    c = TestClient(app)
+    out = c.post("/ask_trace", json={"question": "common themes", "path": "sql"}).json()
+    assert out["path"] == "sql"
+    assert out["rows"] == [[7]]
+
+
+def test_ask_trace_auto_routes_theme_question_to_graph():
+    app = build_app(backend=DuckDBBackend(), graph_store=_graph_store())  # no key needed
+    c = TestClient(app)
+    out = c.post("/ask_trace", json={"question": "common themes in The Dark Knight"}).json()
+    assert out["path"] == "graph"
+
+
+def test_ask_trace_graph_requested_but_not_built():
+    app = build_app(llm=FakeLLMProvider(["SELECT 1 AS x"]), backend=DuckDBBackend())  # no graph
+    c = TestClient(app)
+    out = c.post("/ask_trace", json={"question": "themes", "path": "graph"}).json()
+    assert "build-graph" in out["narrative"]
+    assert out["columns"] is None
+    assert out["path"] == "graph"
