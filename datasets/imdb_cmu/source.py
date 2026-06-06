@@ -18,6 +18,15 @@ def build_parquet(raw_dir: str, out_dir: str, min_votes: int = 1000) -> list[str
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect()
+    for _pragma in (
+        "SET memory_limit='4GB'",
+        "SET max_temp_directory_size='32GB'",
+        "SET threads=2",
+    ):
+        try:
+            con.execute(_pragma)
+        except Exception:  # noqa: BLE001
+            pass
 
     def csv(name: str) -> str:
         path = (raw / name).as_posix()
@@ -78,6 +87,20 @@ def build_parquet(raw_dir: str, out_dir: str, min_votes: int = 1000) -> list[str
         FROM {csv("name.basics.tsv.gz")}
         """
     )
+    con.execute(
+        f"""
+        CREATE TABLE principals AS
+        SELECT tconst, nconst, category, TRY_CAST(ordering AS INTEGER) AS ordering
+        FROM {csv("title.principals.tsv.gz")}
+        WHERE tconst IN (SELECT tconst FROM popular) AND nconst IS NOT NULL
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE principal_ids AS
+        SELECT DISTINCT nconst FROM principals
+        """
+    )
 
     written: list[str] = []
 
@@ -99,7 +122,9 @@ def build_parquet(raw_dir: str, out_dir: str, min_votes: int = 1000) -> list[str
         "title_crew.parquet",
     )
     export(
-        "SELECT * FROM names WHERE nconst IN (SELECT nconst FROM director_ids)",
+        "SELECT * FROM names WHERE nconst IN ("
+        "SELECT nconst FROM director_ids UNION SELECT nconst FROM principal_ids)",
         "name_basics.parquet",
     )
+    export("SELECT * FROM principals", "title_principals.parquet")
     return written

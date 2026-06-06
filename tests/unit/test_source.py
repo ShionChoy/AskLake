@@ -47,7 +47,17 @@ def _fixture(raw):
         [
             ["nm1", "Dir One", "1970", "\\N", "director", "tt1"],
             ["nm2", "Dir Two", "1980", "\\N", "director", "tt2"],
+            ["nm3", "Actor One", "1990", "\\N", "actor", "tt1"],
         ],  # noqa: E501
+    )
+    _write_gz(
+        raw / "title.principals.tsv.gz",
+        ["tconst", "ordering", "nconst", "category", "job", "characters"],
+        [
+            ["tt1", "1", "nm3", "actor", "\\N", '["Neo"]'],
+            ["tt1", "2", "nm1", "director", "\\N", "\\N"],
+            ["tt2", "1", "nm2", "director", "\\N", "\\N"],
+        ],
     )
 
 
@@ -65,7 +75,8 @@ def test_build_parquet_filters_movies_and_min_votes(tmp_path):
     assert {r[0] for r in basics} == {"tt1"}  # tt2 too few votes, tt3 not a movie
 
     names = con.execute(f"SELECT nconst FROM read_parquet('{out}/name_basics.parquet')").fetchall()
-    assert {r[0] for r in names} == {"nm1"}  # only director of the popular movie
+    assert {r[0] for r in names} == {"nm1", "nm3"}  # director + actor of the popular movie
 
     assert any(p.endswith("title_ratings.parquet") for p in written)
     assert any(p.endswith("title_crew.parquet") for p in written)
+    assert any(p.endswith("title_principals.parquet") for p in written)

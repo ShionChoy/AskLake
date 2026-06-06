@@ -15,12 +15,24 @@ tables:
       - {name: averageRating, type: DOUBLE, description: Weighted average user rating, 1-10.}
       - {name: numVotes, type: INTEGER, description: Number of user votes (popularity).}
   - name: name_basics
-    description: People (actors, directors, writers).
+    description: >-
+      People (actors, directors, writers) appearing in the working set's titles;
+      join to title_principals on nconst.
     columns:
       - {name: nconst, description: Person id.}
       - {name: primaryName, description: Person's display name.}
       - {name: birthYear, type: INTEGER, description: Year of birth (PII).}
       - {name: deathYear, type: INTEGER, description: Year of death (PII).}
+  - name: title_principals
+    description: >-
+      Principal cast & crew per title — the link between people (nconst) and titles
+      (tconst). Use this (not title_crew) to find a movie's cast or an actor's
+      filmography. Filter category IN ('actor','actress') for who STARRED in a film.
+    columns:
+      - {name: tconst, description: Title id; joins to title_basics and title_ratings.}
+      - {name: nconst, description: Person id; joins to name_basics.}
+      - {name: category, description: "Role on the title: actor, actress, director, writer, producer, composer, self, etc."}
+      - {name: ordering, type: INTEGER, description: Billing order of the person on that title.}
   - name: title_crew
     description: Directors and writers per title.
     columns:
@@ -37,6 +49,10 @@ synonyms:
   movie: title_basics
   votes: numVotes
   popularity: numVotes
+  starred in: title_principals
+  acted in: title_principals
+  cast: title_principals
+  actor: title_principals
 few_shots:
   - question: Highest-rated sci-fi films after 2010
     sql: |
@@ -50,4 +66,15 @@ few_shots:
       SELECT b.primaryTitle, r.numVotes
       FROM title_basics b JOIN title_ratings r USING (tconst)
       ORDER BY r.numVotes DESC
+      LIMIT 10
+  - question: Top 10 highest-rated movies an actor starred in (e.g. Keanu Reeves)
+    sql: |
+      SELECT b.primaryTitle, r.averageRating
+      FROM title_principals p
+      JOIN name_basics n USING (nconst)
+      JOIN title_basics b USING (tconst)
+      JOIN title_ratings r USING (tconst)
+      WHERE n.primaryName = 'Keanu Reeves'
+        AND p.category IN ('actor', 'actress')
+      ORDER BY r.averageRating DESC
       LIMIT 10
