@@ -45,3 +45,4 @@ build/
 *.log
 .idea/
 .vscode/
+.claude/
