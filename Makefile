@@ -40,7 +40,7 @@ eval-real:
 	uv run python -m eval.real_run
 
 serve:
-	uv run uvicorn api.serve:build_app --factory --host 0.0.0.0 --port 8000
+	uv run uvicorn api.serve:build_app --factory $(if $(wildcard .env),--env-file .env,) --host 0.0.0.0 --port 8000
 
 ui:
 	uv run streamlit run ui/app.py --server.headless true --server.port 8501 --server.address 0.0.0.0 --browser.gatherUsageStats false
