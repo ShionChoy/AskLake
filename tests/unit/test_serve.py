@@ -92,3 +92,17 @@ def test_ask_trace_no_typed_key_shows_sidebar_prompt(monkeypatch):
         json={"question": "q", "provider": "deepseek", "model": "deepseek-chat"},
     ).json()
     assert "sidebar" in out["narrative"].lower()  # friendly prompt, not a 401
+
+
+def test_ask_trace_blank_key_treated_as_no_key(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ASKLAKE_LLM_PROVIDER", raising=False)
+    app = build_app(backend=DuckDBBackend())  # no default provider
+    c = TestClient(app)
+    out = c.post(
+        "/ask_trace",
+        json={"question": "q", "provider": "deepseek", "api_key": "   "},
+    ).json()
+    # A blank key -> friendly prompt, NOT an attempted provider call / 401.
+    assert "sidebar" in out["narrative"].lower()

@@ -72,8 +72,11 @@ def _init_state() -> None:
 def _sidebar() -> None:
     st.sidebar.header("⚙️ Model & API key")
 
+    _saved_provider = st.session_state.get("provider", "deepseek")
     provider = st.sidebar.selectbox(
-        "Provider", PROVIDERS, index=PROVIDERS.index(st.session_state.get("provider", "deepseek"))
+        "Provider",
+        PROVIDERS,
+        index=PROVIDERS.index(_saved_provider) if _saved_provider in PROVIDERS else 0,
     )
     st.session_state.provider = provider
 

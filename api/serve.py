@@ -214,7 +214,7 @@ def build_app(llm: LLMProvider | None = None, backend: StorageBackend | None = N
     @app.post("/ask_trace")
     def ask_trace(payload: dict) -> dict:
         question = payload.get("question", "")
-        api_key = payload.get("api_key", "")
+        api_key = (payload.get("api_key", "") or "").strip()
         # Single-user, local-first: the shared trace log is reset per request.
         log.reset()
         try:
