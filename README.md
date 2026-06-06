@@ -1,207 +1,207 @@
 # AskLake
 
-Governed multi-agent natural-language analytics over your own data
-(Text-to-SQL + GraphRAG). See architecture docs (local).
+**Governed, multi-agent natural-language analytics over your own data.**
 
-## Quickstart (dev)
+AskLake answers plain-English questions through two grounded retrieval paths — Text-to-SQL over a DuckDB/Parquet lakehouse and GraphRAG over a knowledge graph — with a Router that picks one or fuses both. The LLM is a swappable component (DeepSeek by default, Anthropic supported); the engineering value is everything around it: a port-and-adapter engine, a semantic layer, agentic self-correction, governance (RBAC/PII/cost guardrails), a quantified eval harness, and observability. Runs on a 16 GB laptop — DuckDB is embedded, no Docker required for local use.
+
+---
+
+## Features
+
+- **Agentic Text-to-SQL** — a LangGraph pipeline (SchemaRetriever → SQLWriter → Validator → SelfCorrect ≤N) that executes the generated SQL and feeds errors back to the model for bounded self-correction.
+- **Semantic layer** — curated table/column descriptions, metrics, synonyms (e.g. "score" → `averageRating`), and few-shot examples ground the LLM and eliminate whole categories of hallucinated column names.
+- **GraphRAG second path** — multi-hop BFS over a knowledge graph with traceable citations; answers plot/theme questions that pure SQL cannot.
+- **Heuristic Router + Synthesizer** — routes structured questions to SQL, relational/narrative questions to the graph, and fuses both for cross-cutting queries.
+- **Governance hook** — RBAC, PII masking (`birthYear`/`deathYear` masked for `public` role), row-level filters (adult titles hidden), and query-cost guardrails (blocks unbounded scans and non-SELECT writes).
+- **Observability** — `PrometheusObservability` records LLM-call latency, SQL errors, and storage spans; opt-in via `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` which also exposes a `/metrics` endpoint.
+- **Port-and-adapter engine** — 7 ports (`LLMProvider`, `StorageBackend`, `SchemaProvider`, `RetrievalPath`, `AgentGraph` nodes, `GovernanceHook`, `Observability`) keep every component swappable without touching existing adapters.
+- **Dataset-agnostic** — the engine never hardcodes column names; everything dataset-specific (connector, `semantic.yaml`, `governance.yaml`, graph ontology) lives under `datasets/<name>/`.
+- **Quantified eval harness** — execution-accuracy + valid-SQL-rate + self-correction count, with a 12-case hand-authored IMDb gold set and `make eval-real` for live LLM runs.
+
+---
+
+## Quickstart
+
+### 1. Install
 
 ```bash
-# 1. Install deps
 uv sync
+```
 
-# 2. Run the P0 in-process smoke demo (no Docker, no API key required)
-make demo-p0
-# Expected output: columns + 2 rows (Interstellar, Tenet) + "demo-p0 OK"
+### 2. Configure
 
-# 3. Copy the env template (edit values as needed)
+```bash
 cp .env.example .env
-
-# 4. Start the full core stack (requires Docker)
-make dev       # docker compose --profile core up
-# Services: FastAPI app on :8000, Postgres on :5432, Qdrant on :6333
-
-# 5. Download raw datasets into ./data (gitignored)
-bash scripts/download_data.sh
-
-# 6. Lint + test
-make lint
-make test
+# Edit .env and add your key:
+#   DEEPSEEK_API_KEY=sk-...
 ```
 
-## Phase 1: NL→SQL
+The API will boot and serve `/query` even without a key; only `/ask` (LLM-powered) requires one.
 
-Ask natural-language questions over IMDb. The `/ask` endpoint accepts a question, generates SQL via the LangGraph agent, runs it against the Parquet-backed lakehouse, and returns a table + bar-chart spec.
-
-**Example question:** "Highest-rated sci-fi films after 2010 (top 10)"
-
-### Build the IMDb working set
+### 3. Download and build the data (one-time, ~1.8 GB)
 
 ```bash
-# Download raw TSVs into ./data (gitignored — never committed)
-./scripts/download_data.sh
-
-# Convert TSVs → Parquet (MIN_VOTES default 1000, configurable)
-make build-imdb
-# Writes parquet files to data/; safe to re-run.
+bash scripts/download_data.sh   # downloads raw IMDb TSVs into ./data (gitignored)
+make build-imdb                 # converts TSVs → Parquet; safe to re-run
 ```
 
-### Run the hermetic demo (no API key, no data download required)
+### 4. Start the API (terminal 1)
 
 ```bash
-make demo-p1
-# Expected: 2 stub rows (Sci A 8.9, Sci B 7.5) + chart spec + "demo-p1 OK"
+make serve
+# FastAPI on http://localhost:8000
+# Endpoints: /ask  /query  /info  /ask_trace  /metrics
 ```
 
-### Run the real interactive stack
-
-Set `ANTHROPIC_API_KEY` in your environment (or in `.env` — the provider reads
-`ANTHROPIC_API_KEY` directly; no `ASKLAKE_` prefix required). Point
-`PARQUET_DIR` at the built parquet directory, then:
+### 5. Start the UI (terminal 2)
 
 ```bash
-make dev   # docker compose --profile core up → FastAPI on :8000
+make ui
+# Streamlit on http://localhost:8501
 ```
 
-**Data licenses:** IMDb is non-commercial (no redistribution); CMU is CC BY-SA.
+Open **http://localhost:8501** in your browser.
 
-## Phase 2: Agentic self-correction + evaluation
+### What you'll see
 
-The NL→SQL path is now **agentic**: a cyclic LangGraph (`SQLWriter → Validator → SelfCorrect ≤N → … → END`) executes the generated SQL, and on failure feeds the error back to the model for a bounded number of correction attempts. `AgenticSqlPath` is an additive sibling of the Phase 1 `SqlPath` (the one-shot graph is kept as the evaluation baseline).
+- A model caption (e.g. `model: deepseek-chat · semantic-grounded + self-correcting (agentic)`).
+- An **Ask in natural language** box — type a question such as *"Highest-rated sci-fi films after 2010 (top 10)"*.
+- The generated SQL, a **Backend processing steps** trace (schema retrieval → SQL generation → execution with ✅/❌ and timings; a red ❌ followed by a retry shows the self-correction loop in action), then a result table and bar chart.
+- A **Raw SQL console** for direct DuckDB queries.
 
-**Example self-correction:** the model first writes `SELECT title, rating FROM movies …` (no such column); the validator's error (`Referenced column "rating" not found`) is fed back, and the corrected `SELECT title, averageRating FROM movies …` succeeds.
+---
 
-### Run the hermetic Phase 2 demo (no API key)
+## How It Works
+
+### Architecture
+
+The engine under `engine/` is built around 7 ports with swappable adapters:
+
+| Port | Default adapter |
+|---|---|
+| `LLMProvider` | `DeepSeekProvider` (OpenAI-compatible; `AnthropicProvider` is a drop-in) |
+| `StorageBackend` | `DuckDBBackend` (embedded, 2 GB query memory cap) |
+| `SchemaProvider` | `SemanticLayerProvider` (grounded; `RawSchemaProvider` kept as baseline) |
+| `RetrievalPath` | `AgenticSqlPath` + `GraphRagPath`, dispatched by `Router` |
+| `GovernanceHook` | `PolicyGovernance` (RBAC, PII masking, cost guardrails) |
+| `Observability` | `PrometheusObservability` (opt-in; no-op by default) |
+
+### Agentic Text-to-SQL
+
+The LangGraph agent runs: **SchemaRetriever → SQLWriter → Validator → SelfCorrect (≤N) → END**. The Validator executes the SQL against DuckDB; on failure it injects the error message back into the model context. Example: the model first writes `SELECT title, rating FROM movies` (no such column); the validator's error (`Referenced column "rating" not found`) triggers a correction to `SELECT title, averageRating FROM movies`, which succeeds.
+
+### GraphRAG
+
+`GraphRagPath` does multi-hop BFS over a knowledge-graph triple store, tagging each hop with a source citation. The graph is built from an LLM entity/relation extraction pass constrained by a per-dataset ontology (`datasets/imdb_cmu/graph/ontology.yaml`). The default store is an in-process `InMemoryGraphStore`; a `Neo4jGraphStore` slots behind the same `GraphStore` port for larger graphs.
+
+### Router
+
+A heuristic Router scores SQL-vs-graph features and dispatches to `SqlPath`, `GraphRagPath`, or fuses both. A `Synthesizer` concatenates the SQL table with the graph narrative. Structured aggregation/filter questions route to SQL; plot/theme questions route to the graph; cross-cutting questions trigger fusion. All three components sit behind ports and can be replaced with LLM-backed implementations.
+
+---
+
+## Evaluation
+
+Real run, DeepSeek `deepseek-chat` over a 12-case hand-authored IMDb gold set:
+
+| system | n | valid-SQL | exec-accuracy | avg self-corrections |
+|---|---|---|---|---|
+| baseline (single-prompt)  | 12 | 92%  | 42% | 0.00 |
+| agentic (self-correct)    | 12 | 100% | 50% | 0.08 |
+| semantic layer (grounded) | 12 | 100% | 50% | 0.00 |
+
+The self-correction loop lifts valid-SQL 92%→100% and execution accuracy 42%→50% over the naive baseline. The semantic layer reaches the same accuracy with zero self-corrections — grounding yields valid SQL on the first attempt. This is a 12-case real-data slice with strict multiset-exact scoring; the baseline→agentic delta is the signal.
+
+Reproduce with `make eval-real` (requires a built parquet and an API key). A hermetic illustrative run (no key, no data) is available with `make eval`.
+
+---
+
+## Development
+
+### Hermetic demos (no API key, no data download)
 
 ```bash
-make demo-p2
-# Shows one live self-correction (rating → averageRating) + the eval comparison table.
+make demo        # runs demo-p0 through demo-p5 in sequence
+make demo-p0     # DuckDB smoke test
+make demo-p2     # agentic self-correction (rating → averageRating)
+make demo-p3     # governance: analyst vs public role, cost guardrail
+make demo-p4     # GraphRAG + Router fusion (Nolan films + plot themes)
+make demo-p5     # observability: instrumented self-correction + /metrics excerpt
 ```
 
-### Evaluation
-
-We quantify the agentic lift with an **Execution-Accuracy** harness (result-set multiset match vs a gold SQL):
-
-- **Execution Accuracy** — fraction of questions whose result set matches the gold query's;
-- **Valid-SQL Rate** — fraction whose SQL executes without error;
-- **avg self-corrections** — mean correction rounds per question.
+### Tests and lint
 
 ```bash
-make eval   # hermetic baseline-vs-agentic comparison, no API key
+make test        # pytest unit + integration suite
+make lint        # ruff check + ruff format --check
 ```
 
-The committed `make eval` runs on a tiny **illustrative** hermetic fixture (3-case toy set) that demonstrates the harness and the self-correction mechanism: the single-prompt baseline scores 67% execution accuracy, the agentic self-correct loop scores 100%.
+### CI
 
-> **Headline numbers** (baseline vs agentic over a real BIRD/Spider subset, run with a live LLM) — `TODO: paste real benchmark table`. Methodology + reproduction recipe live in `docs/eval.md` (local).
+CI runs all demos (`p0`→`p5`), the full test suite, and a Docker image build on every push — no prior demo regresses.
 
-## Phase 3: Semantic layer + governance
-
-The SQL path is now **grounded**: a `SemanticLayerProvider` supplies the LLM with curated table/column descriptions, metrics, synonyms (e.g. "score" → `averageRating`), and few-shot SQL examples, pruned to the question by a pluggable `SchemaRetriever` (in-process lexical now; Qdrant-backed later). It is an additive sibling of the bare `RawSchemaProvider` (kept as the eval baseline). Dataset semantics live in `datasets/imdb_cmu/semantic.yaml`.
-
-**Governance** — `PolicyGovernance` enforces `datasets/imdb_cmu/governance.yaml`:
-
-- **RBAC + PII masking** — e.g. `birthYear`/`deathYear` masked for the `public` role
-- **Row-level filtering** — e.g. `adult` titles hidden from `public`
-- **Query cost guardrail** — `before_query` blocks unbounded scans (no LIMIT) and non-SELECT writes, raising `GovernanceError`
-
-### Run the hermetic Phase 3 demo (no API key)
+### Clean up
 
 ```bash
-make demo-p3
-# Same question under `analyst` vs `public`: full vs masked+filtered rows,
-# then one cost-guardrail interception.
+make clean       # removes build artifacts and temporary files
 ```
 
-### Evaluation
+---
 
-`make eval` now prints a **second comparison table** — bare schema vs semantic layer — illustrating the grounding lift (toy: 0% → 100% on a synonym case where the raw schema keeps emitting a non-existent `score` column). Same illustrative / real-numbers-TODO framing as Phase 2; headline numbers come from a manual real-LLM run.
+## Configuration
 
-> **Headline numbers** (raw-schema agentic vs semantic-layer agentic over a real BIRD/Spider subset) — `TODO: paste real benchmark table`. Methodology + reproduction recipe live in `docs/eval.md` (local).
+| Variable | Purpose |
+|---|---|
+| `DEEPSEEK_API_KEY` | DeepSeek auth (default provider) |
+| `ANTHROPIC_API_KEY` + `ASKLAKE_LLM_PROVIDER=anthropic` | use Claude instead of DeepSeek |
+| `ASKLAKE_PARQUET_DIR` | built parquet location (default `data/imdb/parquet`) |
+| `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` | enable `/metrics` Prometheus exposition |
+| `ASKLAKE_API_PORT` | API port (default `8000`) |
+| `ASKLAKE_API_URL` | URL the UI calls (default `http://localhost:8000`) |
 
-## Phase 4: GraphRAG path + router fusion
+### Switching LLM provider
 
-A second retrieval path — `GraphRagPath` — answers questions from a knowledge graph via **multi-hop retrieval with traceable citations**. The graph is built by an **LLM entity/relation extraction** adapter constrained by a per-dataset ontology (`datasets/imdb_cmu/graph/ontology.yaml`); the default store is a dependency-free `InMemoryGraphStore` (a `Neo4jGraphStore` slots behind the same `GraphStore` port later). `GraphRagPath` is an additive sibling of `SqlPath` — `SqlPath` is untouched.
-
-A `Router` scores a question's SQL-vs-graph features and dispatches to `SqlPath`, `GraphRagPath`, or **fuses both** via a deterministic `Synthesizer`. Structured (aggregation / filter) questions route to SQL; plot/theme questions route to the graph; cross-cutting questions trigger fusion. An LLM router/synthesizer can replace the heuristic implementations behind the same interfaces.
-
-- **2nd retrieval path** — `GraphRagPath`: multi-hop BFS over triples, each hop tagged with its source citation.
-- **Router + fusion** — heuristic `Router` (keyword + entity overlap) dispatches or fuses; `Synthesizer` concatenates the SQL table with the graph narrative.
-- **Additive** — `SqlPath`, `AgenticSqlPath`, `SemanticLayerProvider`, and `PolicyGovernance` are unchanged.
-
-### Run the hermetic Phase 4 demo (no API key, no Neo4j)
+DeepSeek is the default (fast, cheap, OpenAI-compatible). To use Claude:
 
 ```bash
-make demo-p4
-# "Nolan's highest-rated pre-2013 films and their common plot themes" → fusion:
-# SQL returns the ranked film table; graph returns shared themes (identity, dreams, chaos)
-# with [plot_*] citations reached by multi-hop from the director.  "demo-p4 OK"
+# in .env
+ANTHROPIC_API_KEY=sk-ant-...
+ASKLAKE_LLM_PROVIDER=anthropic
 ```
 
-### Evaluation
+Both providers implement the same `LLMProvider` port — no other config changes needed.
 
-`make eval` now prints a **third tier** — **routing accuracy** (does the Router pick the right path for sql / graph / fused questions?) plus an illustrative **graph-grounding lift** (a plot-theme question SQL alone cannot ground: 0 citations vs 1 cited theme from the graph). Same illustrative / real-numbers-TODO framing as Phases 2–3; full CMU-graph numbers come from the offline manual ingestion run (recipe in `docs/eval.md`).
+### Optional: Prometheus + Grafana
 
-> **Headline numbers** (routing accuracy + citation precision over a real CMU plot corpus) — `TODO: paste real benchmark table`. Methodology + CMU ingestion recipe live in `docs/eval.md` (local).
-
-## Phase 5: Observability (Prometheus) + productionization
-
-The last empty port — `Observability` — is now filled. `PrometheusObservability`
-(implements the `span`/`event` seam via an injected `prometheus_client` registry) records
-spans (with latency) and events. Two **decorator-adapters** — `ObservingLLMProvider` and
-`ObservingStorageBackend` — wrap the `LLMProvider` / `StorageBackend` ports to emit metrics
-**without touching any existing adapter** (additive port-and-adapter decoration). The
-default app stays no-op; Prometheus is opt-in via `ASKLAKE_OBSERVABILITY_BACKEND=prometheus`,
-which also exposes a `/metrics` endpoint in the Prometheus text exposition format.
-
-### Run the hermetic Phase 5 demo (no API key, no Docker, no live Prometheus)
-
-```bash
-make demo-p5
-# Runs the self-correction scenario through the instrumented adapters and prints the
-# collected metrics: 2 LLM calls (bad gen -> corrected gen), 1 caught sql_error, 2 storage
-# runs, plus a /metrics exposition excerpt.  "demo-p5 OK"
-```
-
-### Optional: live Prometheus + Grafana (offline / roomier box)
-
-The Prometheus/Grafana **servers** are memory-heavy and are not part of CI or any demo.
-Bring them up on demand (the app must be running under the `core` profile so `/metrics` is
-scraped):
+The observability stack is memory-heavy and off by default. Bring it up alongside the core stack when you want live dashboards:
 
 ```bash
 docker compose --profile core --profile observability up
-# Prometheus on :9090, Grafana on :3000 (anonymous admin), dashboard "AskLake Observability".
+# Prometheus on :9090, Grafana on :3000 (anonymous admin)
+# Dashboard: "AskLake Observability"
 ```
 
-`make demo` now runs the full chain `p0 -> p5` in sequence.
+---
 
-## Real headline run (IMDb, live LLM)
+## Project Layout
 
-`make eval-real` runs **all three systems** (baseline, agentic, semantic) over the hand-authored,
-validated real IMDb gold set (`eval/imdb_gold.py`, 12 questions) against a live LLM, printing
-execution-accuracy per system — the resume-grade numbers.
-
-```bash
-# Requires the built IMDb parquet (make build-imdb) and an API key:
-DEEPSEEK_API_KEY=<key>  make eval-real   # DeepSeekProvider (deepseek-chat, OpenAI-compatible)
-ANTHROPIC_API_KEY=<key> make eval-real   # falls back to AnthropicProvider
+```
+engine/          # port interfaces + adapters (LLM, storage, semantic, agents, graph, governance, observability)
+api/             # FastAPI app (/ask, /query, /info, /ask_trace, /metrics)
+ui/              # Streamlit front-end
+datasets/        # per-dataset config (semantic.yaml, governance.yaml, graph ontology, connector)
+eval/            # eval harness + IMDb gold set (eval/imdb_gold.py)
+demos/           # hermetic demo scripts (demo-p0 through demo-p5)
+infra/           # Prometheus + Grafana provisioning (observability profile)
+tests/           # unit + integration tests
 ```
 
-Provider is swappable via the `LLMProvider` port; the core `run_real_eval` function is
-hermetically tested (FakeLLMProvider + in-memory backend) so CI stays green without a key or data.
+---
 
-> **Headline numbers** — real run, DeepSeek `deepseek-chat` over the 12-case IMDb gold set (2026-06-05):
->
-> | system | n | valid-SQL | exec-accuracy | avg self-corrections |
-> |---|---|---|---|---|
-> | baseline (single-prompt)  | 12 | 92%  | 42% | 0.00 |
-> | agentic (self-correct)    | 12 | 100% | 50% | 0.08 |
-> | semantic layer (grounded) | 12 | 100% | 50% | 0.00 |
->
-> The self-correction loop lifts valid-SQL 92%→100% and execution accuracy 42%→50% over the naive
-> baseline; the semantic layer reaches the same accuracy with **zero** self-corrections (grounding
-> yields valid SQL first-try). A 12-case real-data slice — modest absolute accuracy (nuanced
-> questions + strict multiset-exact scoring), but the baseline→agentic lift is the signal.
-> Reproduce with `make eval-real`; methodology in `docs/eval.md`.
+## Data and License
 
-## License
-Apache-2.0. IMDb data is non-commercial (not redistributed); CMU corpus is CC BY-SA.
+**IMDb data** is non-commercial (Terms of Use prohibit redistribution). Raw TSV files are downloaded on demand via `bash scripts/download_data.sh` and written into `data/` (gitignored — never committed to this repo).
+
+**CMU Movie Summary Corpus** is licensed CC BY-SA 4.0 (attribution + share-alike).
+
+**Project code** is licensed **Apache-2.0**. See `LICENSE`.
