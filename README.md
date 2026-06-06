@@ -14,6 +14,7 @@ AskLake answers plain-English questions through two grounded retrieval paths —
 - **Heuristic Router + Synthesizer** — routes structured questions to SQL, relational/narrative questions to the graph, and fuses both for cross-cutting queries.
 - **Governance hook** — RBAC, PII masking (`birthYear`/`deathYear` masked for `public` role), row-level filters (adult titles hidden), and query-cost guardrails (blocks unbounded scans and non-SELECT writes).
 - **Observability** — `PrometheusObservability` records LLM-call latency, SQL errors, and storage spans; opt-in via `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` which also exposes a `/metrics` endpoint.
+- **Bring-your-own key in the browser** — paste an API key and pick the provider/model right in the UI sidebar, then optionally save it to a local `0600` file for next time (or delete it). Credentials are sent per request and **never persisted server-side**; the server boots fine with no key at all.
 - **Port-and-adapter engine** — 7 ports (`LLMProvider`, `StorageBackend`, `SchemaProvider`, `RetrievalPath`, `AgentGraph` nodes, `GovernanceHook`, `Observability`) keep every component swappable without touching existing adapters.
 - **Dataset-agnostic** — the engine never hardcodes column names; everything dataset-specific (connector, `semantic.yaml`, `governance.yaml`, graph ontology) lives under `datasets/<name>/`.
 - **Quantified eval harness** — execution-accuracy + valid-SQL-rate + self-correction count, with a 12-case hand-authored IMDb gold set and `make eval-real` for live LLM runs.
@@ -36,7 +37,7 @@ cp .env.example .env
 #   DEEPSEEK_API_KEY=sk-...
 ```
 
-The API will boot and serve `/query` even without a key; only `/ask` (LLM-powered) requires one.
+Providing the key here is **optional** — you can instead paste it in the browser sidebar at runtime (and save it locally for next time). The API boots and serves `/query` even with no key configured; only LLM-powered questions need one, supplied either way.
 
 ### 3. Download and build the data (one-time, ~1.8 GB)
 
@@ -64,7 +65,8 @@ Open **http://localhost:8501** in your browser.
 
 ### What you'll see
 
-- A model caption (e.g. `model: deepseek-chat · semantic-grounded + self-correcting (agentic)`).
+- A **⚙️ Model & API key** sidebar — choose the provider and model, paste your API key (masked), and **Save locally** / **Delete saved key**. Ask before entering a key and you'll get a friendly "enter your API key in the sidebar" prompt rather than an error.
+- A model caption (e.g. `model: deepseek-chat · provider: deepseek`) reflecting your selection.
 - An **Ask in natural language** box — type a question such as *"Highest-rated sci-fi films after 2010 (top 10)"*.
 - The generated SQL, a **Backend processing steps** trace (schema retrieval → SQL generation → execution with ✅/❌ and timings; a red ❌ followed by a retry shows the self-correction loop in action), then a result table and bar chart.
 - A **Raw SQL console** for direct DuckDB queries.
@@ -158,6 +160,8 @@ make clean       # removes build artifacts and temporary files
 | `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` | enable `/metrics` Prometheus exposition |
 | `ASKLAKE_API_PORT` | API port (default `8000`) |
 | `ASKLAKE_API_URL` | URL the UI calls (default `http://localhost:8000`) |
+
+> For local use you don't have to set any key/model variable: the browser sidebar (**⚙️ Model & API key**) lets you paste a key and pick a provider/model, and optionally save them to `~/.config/asklake/credentials.json` (`0600`). Credentials entered there are sent per request and never stored on the server.
 
 ### Switching LLM provider
 
