@@ -175,7 +175,8 @@ def build_app(llm: LLMProvider | None = None, backend: StorageBackend | None = N
         question = payload.get("question", "")
         log.reset()
         t0 = time.perf_counter()
-        rr = app.state.sql_path.run(question)
+        with app.state.observability.span("ask"):
+            rr = app.state.sql_path.run(question)
         elapsed = (time.perf_counter() - t0) * 1000
         return {
             "path": rr.path,
