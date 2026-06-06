@@ -1,4 +1,4 @@
-.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 eval eval-real build-imdb
+.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 eval eval-real build-imdb serve ui clean
 
 dev:
 	docker compose --profile core up
@@ -38,3 +38,13 @@ eval:
 
 eval-real:
 	uv run python -m eval.real_run
+
+serve:
+	uv run uvicorn api.serve:build_app --factory --host 0.0.0.0 --port 8000
+
+ui:
+	uv run streamlit run ui/app.py --server.headless true --server.port 8501 --server.address 0.0.0.0 --browser.gatherUsageStats false
+
+clean:
+	find . -path ./.venv -prune -o -type d -name __pycache__ -print0 | xargs -0 rm -rf
+	rm -rf .pytest_cache .ruff_cache .mypy_cache

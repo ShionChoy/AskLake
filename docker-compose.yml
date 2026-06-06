@@ -4,11 +4,14 @@ services:
     profiles: ["core"]
     environment:
       ASKLAKE_OBSERVABILITY_BACKEND: prometheus
+      ASKLAKE_PARQUET_DIR: /app/data/imdb/parquet
     ports:
       - "8000:8000"
     env_file:
       - path: .env
         required: false
+    volumes:
+      - ./data:/app/data:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
