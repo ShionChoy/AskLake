@@ -137,46 +137,111 @@ class _TracingBackend:
 
 
 def build_app(llm: LLMProvider | None = None, backend: StorageBackend | None = None) -> FastAPI:
-    """Build the production app. With a configured provider it serves the grounded + agentic
-    /ask plus /info and /ask_trace; with no provider it still boots (/health, /query work)."""
+    """Build the production app. Always serves /health, /query, /info and /ask_trace; the LLM is
+    optional at boot — the browser can supply a provider/key per request (BYO key)."""
     if backend is None:
         parquet = PARQUET_DIR if Path(PARQUET_DIR).exists() else None
         backend = DuckDBBackend(parquet_dir=parquet)
         apply_duckdb_guardrails(backend)
-    if llm is None:
-        try:
-            llm = make_provider()
-        except Exception as exc:  # noqa: BLE001
-            print(f"[api.serve] no LLM provider configured ({exc}); /ask disabled, /query works")
-            return create_app(backend=backend)
 
-    model_name = getattr(llm, "_model", None) or type(llm).__name__
-    provider_name = type(llm).__name__
+    # Boot-time default provider: explicit arg, else env, else none (BYO key via the UI).
+    default_llm = llm
+    if default_llm is None:
+        try:
+            default_llm = make_provider()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[api.serve] no default LLM provider ({exc}); supply a key in the UI sidebar")
+            default_llm = None
+
     log = _TraceLog()
     tbackend = _TracingBackend(backend, log)
-    tllm = _TracingLLM(llm, log)
     tschema = _TracingSchema(SemanticLayerProvider.from_yaml(SEMANTIC_YAML), log)
-    path = AgenticSqlPath(tllm, tschema, tbackend, max_retries=2)
-    app = create_app(backend=tbackend, sql_path=path)
+
+    def _make_path(provider_llm: LLMProvider) -> AgenticSqlPath:
+        return AgenticSqlPath(_TracingLLM(provider_llm, log), tschema, tbackend, max_retries=2)
+
+    def _model_of(provider_llm: LLMProvider) -> str:
+        return getattr(provider_llm, "_model", None) or type(provider_llm).__name__
+
+    default_path = _make_path(default_llm) if default_llm is not None else None
+    default_model = _model_of(default_llm) if default_llm is not None else None
+    default_provider = type(default_llm).__name__ if default_llm is not None else None
+
+    app = create_app(backend=tbackend, sql_path=default_path)
     app.state.trace_log = log
-    app.state.model_name = model_name
-    app.state.provider_name = provider_name
+    app.state.model_name = default_model
+    app.state.provider_name = default_provider
+
+    def _resolve(provider: str, model: str, api_key: str):
+        """Return (path, effective_model) for this request, or (None, None) when no key is usable.
+
+        A typed key => build a per-request provider (BYO). Otherwise fall back to the boot-time
+        default provider; when there is none, return (None, None) so the caller can prompt the
+        user to enter a key. (The UI always sends `provider` from the selectbox, so keying off
+        `api_key` is what distinguishes "bring your own" from "use the server default".)"""
+        if api_key:
+            req_llm = make_provider(provider or None, api_key=api_key or None, model=model or None)
+            return _make_path(req_llm), _model_of(req_llm)
+        if default_path is not None:
+            return default_path, default_model
+        return None, None
+
+    def _empty(narrative: str, model: str = "") -> dict:
+        return {
+            "path": "sql",
+            "sql": "",
+            "columns": None,
+            "rows": None,
+            "chart_spec": None,
+            "narrative": narrative,
+            "model": model,
+            "steps": list(log.steps),
+            "elapsed_ms": 0.0,
+        }
+
+    def _redact(text: str, secret: str) -> str:
+        """Keep the (useful) error detail but never echo the user's key back to the client."""
+        return text.replace(secret, "***") if secret else text
 
     @app.get("/info")
     def info() -> dict:
         return {
-            "provider": provider_name,
-            "model": model_name,
+            "provider": default_provider or "(client-supplied)",
+            "model": default_model or "(set in the sidebar)",
             "path": "semantic-grounded + self-correcting (agentic)",
         }
 
     @app.post("/ask_trace")
     def ask_trace(payload: dict) -> dict:
         question = payload.get("question", "")
+        api_key = payload.get("api_key", "")
+        # Single-user, local-first: the shared trace log is reset per request.
         log.reset()
+        try:
+            path, model = _resolve(payload.get("provider", ""), payload.get("model", ""), api_key)
+        except Exception as exc:  # noqa: BLE001
+            return _empty(
+                _redact(f"Could not initialize the model: {exc}", api_key),
+                payload.get("model", ""),
+            )
+        if path is None:
+            return _empty("Enter your API key in the sidebar to ask questions.")
         t0 = time.perf_counter()
-        with app.state.observability.span("ask"):
-            rr = app.state.sql_path.run(question)
+        try:
+            with app.state.observability.span("ask"):
+                rr = path.run(question)
+        except Exception as exc:  # noqa: BLE001
+            log.add("Model call failed", ok=False, detail=_redact(str(exc), api_key))
+            return {
+                **_empty(
+                    _redact(
+                        f"The model call failed: {exc}. Check your API key and model.",
+                        api_key,
+                    ),
+                    model,
+                ),
+                "elapsed_ms": round((time.perf_counter() - t0) * 1000, 1),
+            }
         elapsed = (time.perf_counter() - t0) * 1000
         return {
             "path": rr.path,
@@ -185,7 +250,7 @@ def build_app(llm: LLMProvider | None = None, backend: StorageBackend | None = N
             "rows": [list(r) for r in rr.result.rows] if rr.result else None,
             "chart_spec": rr.chart_spec,
             "narrative": rr.narrative,
-            "model": model_name,
+            "model": model,
             "steps": list(log.steps),
             "elapsed_ms": round(elapsed, 1),
         }
