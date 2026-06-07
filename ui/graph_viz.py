@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 MAX_TRIPLES = 200
-# vis.js node color dicts (seaborn-muted palette): background + darker border + hover/highlight.
+# vis.js node color dicts (Morandi muted palette): cool dusty blue-gray for entities,
+# warm dusty clay for leaf concepts. background + darker border + hover/highlight variants.
 COLOR_SUBJECT = {  # entities with outgoing edges (e.g. films/titles)
-    "background": "#4C72B0",
-    "border": "#39557D",
-    "highlight": {"background": "#5B83C2", "border": "#39557D"},
-    "hover": {"background": "#5B83C2", "border": "#39557D"},
+    "background": "#88A0A8",
+    "border": "#6E848B",
+    "highlight": {"background": "#9CB2B9", "border": "#6E848B"},
+    "hover": {"background": "#9CB2B9", "border": "#6E848B"},
 }
 COLOR_LEAF = {  # leaf concepts that only appear as objects (e.g. themes)
-    "background": "#DD8452",
-    "border": "#B2693F",
-    "highlight": {"background": "#E89A6E", "border": "#B2693F"},
-    "hover": {"background": "#E89A6E", "border": "#B2693F"},
+    "background": "#C5A99B",
+    "border": "#A88B7D",
+    "highlight": {"background": "#D4BCB1", "border": "#A88B7D"},
+    "hover": {"background": "#D4BCB1", "border": "#A88B7D"},
 }
 _SIZE_BASE = 10
 _SIZE_PER_DEGREE = 4
@@ -89,7 +90,7 @@ _PYVIS_OPTIONS = """
             "width": 1.5, "selectionWidth": 2,
             "smooth": {"type": "continuous", "roundness": 0.2},
             "arrows": {"to": {"enabled": true, "scaleFactor": 0.5}},
-            "font": {"size": 9, "color": "#8A93A3", "strokeWidth": 3, "strokeColor": "#ffffff",
+            "font": {"size": 12, "color": "#3E4654", "strokeWidth": 5, "strokeColor": "#ffffff",
                      "align": "horizontal"}}
 }
 """
