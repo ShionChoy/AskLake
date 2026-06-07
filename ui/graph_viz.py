@@ -93,7 +93,7 @@ def _to_html(nodes: list[dict], edges: list[dict]) -> str:
     return net.generate_html(notebook=False)
 
 
-def render_network(triples) -> None:
+def render_network(triples: list[list]) -> None:
     """Render the interactive network into the current Streamlit container."""
     import streamlit as st
     import streamlit.components.v1 as components
@@ -109,4 +109,5 @@ def render_network(triples) -> None:
     except Exception:  # noqa: BLE001
         st.caption("Network view unavailable.")
         return
+    # +20px over the 520px canvas leaves an iframe buffer so the canvas isn't clipped
     components.html(html, height=540, scrolling=False)
