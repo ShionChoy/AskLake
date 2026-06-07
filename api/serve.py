@@ -53,6 +53,14 @@ def apply_duckdb_guardrails(
             pass
 
 
+def _triples_of(rr) -> list[list] | None:
+    """Pull graph triples [subject, relation, object, source] out of a RetrievalResult,
+    or None when the result is not a graph triple table (e.g. a SQL result)."""
+    if rr and rr.result and rr.result.columns == ["subject", "relation", "object", "source"]:
+        return [list(r) for r in rr.result.rows]
+    return None
+
+
 class _TraceLog:
     """Ordered, request-scoped record of backend processing steps (for the UI)."""
 
@@ -317,12 +325,17 @@ def build_app(
                 return _empty("Enter your API key in the sidebar to ask questions.")
 
         t0 = time.perf_counter()
+        graph_triples = None
         try:
             with app.state.observability.span("ask"):
                 if fuse:
-                    rr = synth.fuse(question, [sql_runner.run(question), graph_path.run(question)])
+                    sql_rr = sql_runner.run(question)
+                    graph_rr = graph_path.run(question)
+                    rr = synth.fuse(question, [sql_rr, graph_rr])
+                    graph_triples = _triples_of(graph_rr)
                 elif needs_graph:
                     rr = graph_path.run(question)
+                    graph_triples = _triples_of(rr)
                 else:
                     rr = sql_runner.run(question)
         except Exception as exc:  # noqa: BLE001
@@ -344,6 +357,7 @@ def build_app(
             "rows": [list(r) for r in rr.result.rows] if rr.result else None,
             "chart_spec": rr.chart_spec,
             "narrative": rr.narrative,
+            "graph_triples": graph_triples,
             "model": model,
             "steps": list(log.steps),
             "elapsed_ms": round(elapsed, 1),

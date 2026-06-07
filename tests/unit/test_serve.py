@@ -181,3 +181,45 @@ def test_ask_trace_graph_requested_but_not_built():
     assert "build-graph" in out["narrative"]
     assert out["columns"] is None
     assert out["path"] == "graph"
+
+
+def test_ask_trace_graph_includes_triples(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ASKLAKE_LLM_PROVIDER", raising=False)
+    app = build_app(backend=DuckDBBackend(), graph_store=_graph_store())
+    c = TestClient(app)
+    out = c.post(
+        "/ask_trace", json={"question": "themes of The Dark Knight", "path": "graph"}
+    ).json()
+    assert out["graph_triples"]
+    assert all(len(t) == 4 for t in out["graph_triples"])
+    assert any(t[0] == "The Dark Knight" for t in out["graph_triples"])
+
+
+def test_ask_trace_fusion_includes_graph_triples():
+    app = build_app(
+        llm=FakeLLMProvider(["SELECT 1 AS x"]),
+        backend=DuckDBBackend(),
+        graph_store=_graph_store(),
+    )
+    c = TestClient(app)
+    out = c.post(
+        "/ask_trace", json={"question": "The Dark Knight rating and themes", "path": "fusion"}
+    ).json()
+    assert out["rows"] == [[1]]  # SQL table stays the primary result
+    assert out["graph_triples"]  # graph triples ride alongside, not in rows
+    assert all(len(t) == 4 for t in out["graph_triples"])
+    assert any(t[2] == "identity" for t in out["graph_triples"])
+
+
+def test_ask_trace_sql_only_has_no_graph_triples():
+    app = build_app(
+        llm=FakeLLMProvider(["SELECT 7 AS x"]),
+        backend=DuckDBBackend(),
+        graph_store=_graph_store(),
+    )
+    c = TestClient(app)
+    out = c.post("/ask_trace", json={"question": "common themes", "path": "sql"}).json()
+    assert out["path"] == "sql"
+    assert out.get("graph_triples") is None
