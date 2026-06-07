@@ -1,0 +1,71 @@
+from ui.graph_viz import COLOR_LEAF, COLOR_SUBJECT, MAX_TRIPLES, build_network_data
+
+TRIPLES = [
+    ["The Dark Knight", "HAS_THEME", "chaos", "cmu:1"],
+    ["The Dark Knight", "HAS_THEME", "identity", "cmu:1"],
+    ["Inception", "HAS_THEME", "identity", "cmu:2"],
+]
+
+
+def test_dedupes_nodes_and_counts_degree():
+    nodes, edges, truncated = build_network_data(TRIPLES)
+    assert truncated is False
+    ids = [n["id"] for n in nodes]
+    assert ids == ["The Dark Knight", "chaos", "identity", "Inception"]  # first-seen, deduped
+    by_id = {n["id"]: n for n in nodes}
+    assert by_id["The Dark Knight"]["title"] == "The Dark Knight · 2 connection(s)"
+    assert by_id["identity"]["title"] == "identity · 2 connection(s)"
+    # a hub (degree 2) renders larger than a leaf (degree 1)
+    assert by_id["The Dark Knight"]["size"] > by_id["chaos"]["size"]
+    assert len(edges) == 3
+
+
+def test_two_tone_color():
+    nodes, _, _ = build_network_data(TRIPLES)
+    color = {n["id"]: n["color"] for n in nodes}
+    assert color["The Dark Knight"] == COLOR_SUBJECT
+    assert color["Inception"] == COLOR_SUBJECT
+    assert color["chaos"] == COLOR_LEAF
+    assert color["identity"] == COLOR_LEAF
+
+
+def test_edge_label_and_source():
+    _, edges, _ = build_network_data(TRIPLES)
+    e = edges[0]
+    assert e["from"] == "The Dark Knight"
+    assert e["to"] == "chaos"
+    assert e["label"] == "HAS_THEME"
+    assert e["title"] == "cmu:1"
+
+
+def test_truncates_over_cap():
+    big = [[f"s{i}", "REL", f"o{i}", f"cmu:{i}"] for i in range(MAX_TRIPLES + 50)]
+    _, edges, truncated = build_network_data(big)
+    assert truncated is True
+    assert len(edges) == MAX_TRIPLES  # only the first MAX_TRIPLES are used
+
+
+def test_skips_malformed_rows():
+    rows = [
+        ["A", "REL", "B", "cmu:1"],
+        ["", "REL", "B", "cmu:2"],  # missing subject
+        ["A", "REL", "", "cmu:3"],  # missing object
+        ["A", "REL"],  # too short
+    ]
+    nodes, edges, _ = build_network_data(rows)
+    assert len(edges) == 1
+    assert {n["id"] for n in nodes} == {"A", "B"}
+
+
+def test_self_loop_counts_once():
+    nodes, edges, _ = build_network_data([["A", "IS_A", "A", "src:1"]])
+    by_id = {n["id"]: n for n in nodes}
+    assert by_id["A"]["title"] == "A · 1 connection(s)"
+    assert len(edges) == 1
+
+
+def test_mixed_node_gets_subject_color():
+    # "bridge" is first an object (A->bridge), then a subject (bridge->C)
+    nodes, _, _ = build_network_data([["A", "R", "bridge", "s"], ["bridge", "R", "C", "s"]])
+    color = {n["id"]: n["color"] for n in nodes}
+    assert color["bridge"] == COLOR_SUBJECT
