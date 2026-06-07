@@ -20,7 +20,9 @@ _SIZE_PER_DEGREE = 4
 _SIZE_MAX = 40
 
 
-def build_network_data(triples: list[list]) -> tuple[list[dict], list[dict], bool]:
+def build_network_data(
+    triples: list[list], *, node_scale: float = 1.0
+) -> tuple[list[dict], list[dict], bool]:
     """Pure transform: triples [subject, relation, object, source] -> (nodes, edges, truncated).
 
     nodes/edges are plain pyvis-ready dicts; truncated is True when the input exceeded
@@ -61,7 +63,9 @@ def build_network_data(triples: list[list]) -> tuple[list[dict], list[dict], boo
             "id": name,
             "label": name,
             "title": f"{name} · {degree[name]} connection(s)",
-            "size": min(_SIZE_BASE + _SIZE_PER_DEGREE * degree[name], _SIZE_MAX),
+            "size": round(
+                min(_SIZE_BASE + _SIZE_PER_DEGREE * degree[name], _SIZE_MAX) * node_scale
+            ),
             "color": COLOR_SUBJECT if name in subjects else COLOR_LEAF,
         }
         for name in order

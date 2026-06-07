@@ -78,3 +78,12 @@ def test_to_html_contains_labels():
     assert isinstance(html, str) and len(html) > 0
     assert "The Dark Knight" in html  # node label embedded in the vis.js data
     assert "HAS_THEME" in html  # edge label embedded
+
+
+def test_node_scale_scales_size():
+    base, _, _ = build_network_data(TRIPLES)
+    scaled, _, _ = build_network_data(TRIPLES, node_scale=2.0)
+    base_size = {n["id"]: n["size"] for n in base}
+    scaled_size = {n["id"]: n["size"] for n in scaled}
+    assert scaled_size["The Dark Knight"] == base_size["The Dark Knight"] * 2
+    assert scaled_size["chaos"] == base_size["chaos"] * 2
