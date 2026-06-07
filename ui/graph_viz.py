@@ -167,18 +167,25 @@ def _to_html(
 
 
 def render_network(triples: list[list]) -> None:
-    """Render the interactive network into the current Streamlit container."""
+    """Render the interactive network plus its size/spacing/freeze controls."""
     import streamlit as st
     import streamlit.components.v1 as components
 
-    nodes, edges, truncated = build_network_data(triples)
+    c1, c2, c3 = st.columns(3)
+    node_scale = c1.slider("Node size", 0.5, 2.0, 1.0, 0.1, key="gv_node_scale")
+    spacing = c2.slider(
+        "Spacing", 60, 360, 160, 20, key="gv_spacing", help="lower = denser, higher = more spread"
+    )
+    freeze = c3.toggle("Freeze layout", value=False, key="gv_freeze")
+
+    nodes, edges, truncated = build_network_data(triples, node_scale=node_scale)
     if not nodes:
         st.caption("No graph facts to visualize.")
         return
     if truncated:
         st.caption(f"Showing the first {MAX_TRIPLES} facts.")
     try:
-        html = _to_html(nodes, edges)
+        html = _to_html(nodes, edges, spacing=spacing, freeze=freeze)
     except Exception:  # noqa: BLE001
         st.caption("Network view unavailable.")
         return
