@@ -11,6 +11,7 @@ AskLake answers plain-English questions through two grounded retrieval paths —
 - **Agentic Text-to-SQL** — a LangGraph pipeline (SchemaRetriever → SQLWriter → Validator → SelfCorrect ≤N) that executes the generated SQL and feeds errors back to the model for bounded self-correction.
 - **Semantic layer** — curated table/column descriptions, metrics, synonyms (e.g. "score" → `averageRating`), and few-shot examples ground the LLM and eliminate whole categories of hallucinated column names.
 - **GraphRAG second path** — multi-hop BFS over a knowledge graph with traceable citations; answers plot/theme questions that pure SQL cannot.
+- **Interactive network view** — graph and fusion answers also render their triples as a draggable, zoomable pyvis network (relation-labeled edges, hubs sized by degree, source citations on hover) in a 🕸️ Network view expander beneath the table.
 - **Heuristic Router + Synthesizer** — routes structured questions to SQL, relational/narrative questions to the graph, and fuses both for cross-cutting queries.
 - **Governance hook** — RBAC, PII masking (`birthYear`/`deathYear` masked for `public` role), row-level filters (adult titles hidden), and query-cost guardrails (blocks unbounded scans and non-SELECT writes).
 - **Observability** — `PrometheusObservability` records LLM-call latency, SQL errors, and storage spans; opt-in via `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` which also exposes a `/metrics` endpoint.
