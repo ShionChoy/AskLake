@@ -46,6 +46,15 @@ bash scripts/download_data.sh   # downloads raw IMDb TSVs into ./data (gitignore
 make build-imdb                 # converts TSVs → Parquet; safe to re-run
 ```
 
+### 3b. (Optional) Build the knowledge graph for GraphRAG
+
+```bash
+GRAPH_FILMS=200 make build-graph    # one-time LLM extraction over CMU plots; needs your key
+# writes data/imdb/graph/triples.jsonl; the API loads it automatically at boot
+```
+
+Without this, the browser still answers SQL questions; graph/fusion routing activates once the graph is built.
+
 ### 4. Start the API (terminal 1)
 
 ```bash
@@ -66,6 +75,7 @@ Open **http://localhost:8501** in your browser.
 ### What you'll see
 
 - A **⚙️ Model & API key** sidebar — choose the provider and model, paste your API key (masked), and **Save locally** / **Delete saved key**. Ask before entering a key and you'll get a friendly "enter your API key in the sidebar" prompt rather than an error.
+- A **Retrieval path** selector (Auto / SQL / Graph / Fusion). Auto routes structured questions to SQL and plot/theme questions to the graph (fusing both when relevant); Graph answers need no API key. Graph/fusion answers show a cited narrative (each fact tagged with its source plot).
 - A model caption (e.g. `model: deepseek-chat · provider: deepseek`) reflecting your selection.
 - An **Ask in natural language** box — type a question such as *"Highest-rated sci-fi films after 2010 (top 10)"*.
 - The generated SQL, a **Backend processing steps** trace (schema retrieval → SQL generation → execution with ✅/❌ and timings; a red ❌ followed by a retry shows the self-correction loop in action), then a result table and bar chart.
