@@ -1,8 +1,19 @@
 from __future__ import annotations
 
 MAX_TRIPLES = 200
-COLOR_SUBJECT = "#4C78A8"  # entities with outgoing edges (e.g. films/titles)
-COLOR_LEAF = "#F58518"  # leaf concepts that only appear as objects (e.g. themes)
+# vis.js node color dicts (seaborn-muted palette): background + darker border + hover/highlight.
+COLOR_SUBJECT = {  # entities with outgoing edges (e.g. films/titles)
+    "background": "#4C72B0",
+    "border": "#39557D",
+    "highlight": {"background": "#5B83C2", "border": "#39557D"},
+    "hover": {"background": "#5B83C2", "border": "#39557D"},
+}
+COLOR_LEAF = {  # leaf concepts that only appear as objects (e.g. themes)
+    "background": "#DD8452",
+    "border": "#B2693F",
+    "highlight": {"background": "#E89A6E", "border": "#B2693F"},
+    "hover": {"background": "#E89A6E", "border": "#B2693F"},
+}
 _SIZE_BASE = 10
 _SIZE_PER_DEGREE = 4
 _SIZE_MAX = 40
@@ -58,15 +69,28 @@ def build_network_data(triples: list[list]) -> tuple[list[dict], list[dict], boo
 
 
 # vis.js options as strict JSON (pyvis.set_options does json.loads on this string).
-# hover + hoverConnectedEdges gives the "highlight neighbors" feel with no custom JS.
+# Spread-out barnesHut layout, soft nodes with a white label halo, light curved edges with
+# small horizontal relation labels, and no nav buttons. hover+hoverConnectedEdges highlights
+# a node's neighborhood with no custom JS.
 _PYVIS_OPTIONS = """
 {
-  "interaction": {"hover": true, "hoverConnectedEdges": true, "tooltipDelay": 100,
-                  "navigationButtons": true},
-  "physics": {"stabilization": {"iterations": 150}},
-  "nodes": {"shape": "dot", "font": {"size": 14}},
-  "edges": {"arrows": {"to": {"enabled": true}}, "font": {"size": 10, "align": "middle"},
-            "smooth": false}
+  "interaction": {"hover": true, "hoverConnectedEdges": true, "tooltipDelay": 120,
+                  "navigationButtons": false, "zoomView": true, "dragNodes": true},
+  "physics": {"solver": "barnesHut",
+              "barnesHut": {"gravitationalConstant": -12000, "centralGravity": 0.25,
+                            "springLength": 160, "springConstant": 0.05, "damping": 0.09,
+                            "avoidOverlap": 0.6},
+              "stabilization": {"iterations": 200}},
+  "nodes": {"shape": "dot", "borderWidth": 2, "borderWidthSelected": 3,
+            "font": {"size": 14, "color": "#2A2A2A", "strokeWidth": 4, "strokeColor": "#ffffff",
+                     "face": "Helvetica"},
+            "shadow": {"enabled": true, "size": 6, "x": 0, "y": 2, "color": "rgba(0,0,0,0.15)"}},
+  "edges": {"color": {"color": "#C2CAD6", "highlight": "#6B7B8F", "hover": "#6B7B8F"},
+            "width": 1.5, "selectionWidth": 2,
+            "smooth": {"type": "continuous", "roundness": 0.2},
+            "arrows": {"to": {"enabled": true, "scaleFactor": 0.5}},
+            "font": {"size": 9, "color": "#8A93A3", "strokeWidth": 3, "strokeColor": "#ffffff",
+                     "align": "horizontal"}}
 }
 """
 
@@ -80,7 +104,7 @@ def _to_html(nodes: list[dict], edges: list[dict]) -> str:
         height="520px",
         width="100%",
         directed=True,
-        bgcolor="#ffffff",
+        bgcolor="#FAFBFC",
         font_color="#222222",
         notebook=False,
         cdn_resources="in_line",
