@@ -6,9 +6,10 @@ import requests
 import streamlit as st
 
 try:  # `streamlit run ui/app.py` puts ui/ on sys.path; pytest puts the repo root on sys.path
-    from ui import credentials
+    from ui import credentials, graph_viz
 except ImportError:  # pragma: no cover
     import credentials  # type: ignore[no-redef]
+    import graph_viz  # type: ignore[no-redef]
 
 API_URL = os.environ.get("ASKLAKE_API_URL", "http://localhost:8000")
 
@@ -179,6 +180,10 @@ def render() -> None:
                 xi = resp["columns"].index(spec["x"])
                 yi = resp["columns"].index(spec["y"])
                 st.bar_chart({r[xi]: r[yi] for r in resp["rows"]})
+            triples = resp.get("graph_triples")
+            if triples:
+                with st.expander("🕸️ Network view", expanded=False):
+                    graph_viz.render_network(triples)
 
     st.header("Raw SQL console")
     sql = st.text_area("SQL", value="SELECT 1 AS hello")
