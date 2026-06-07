@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 MAX_TRIPLES = 200
 # vis.js node color dicts (Morandi muted palette): cool dusty blue-gray for entities,
 # warm dusty clay for leaf concepts. background + darker border + hover/highlight variants.
@@ -73,36 +75,75 @@ def build_network_data(
     return nodes, edges, truncated
 
 
-# vis.js options as strict JSON (pyvis.set_options does json.loads on this string).
-# Spread-out barnesHut layout, soft nodes with a white label halo, light curved edges with
-# small horizontal relation labels, and no nav buttons. hover+hoverConnectedEdges highlights
-# a node's neighborhood with no custom JS.
-_PYVIS_OPTIONS = """
-{
-  "interaction": {"hover": true, "hoverConnectedEdges": true, "tooltipDelay": 120,
-                  "navigationButtons": false, "zoomView": true, "dragNodes": true},
-  "physics": {"solver": "barnesHut",
-              "barnesHut": {"gravitationalConstant": -12000, "centralGravity": 0.25,
-                            "springLength": 160, "springConstant": 0.05, "damping": 0.09,
-                            "avoidOverlap": 0.6},
-              "stabilization": {"iterations": 200}},
-  "nodes": {"shape": "dot", "borderWidth": 2, "borderWidthSelected": 3,
-            "font": {"size": 14, "color": "#2A2A2A", "strokeWidth": 4, "strokeColor": "#ffffff",
-                     "face": "Helvetica"},
-            "shadow": {"enabled": true, "size": 6, "x": 0, "y": 2, "color": "rgba(0,0,0,0.15)"}},
-  "edges": {"color": {"color": "#C2CAD6", "highlight": "#6B7B8F", "hover": "#6B7B8F"},
-            "width": 1.5, "selectionWidth": 2,
+# vis.js options (strict JSON via json.dumps), parameterized by layout spacing.
+# springLength = spacing; gravitationalConstant = -75 * spacing (so spacing=160 reproduces the
+# -12000 default). hover + hoverConnectedEdges highlights a node's neighborhood with no custom JS.
+def _options(spacing: int = 160) -> str:
+    opts = {
+        "interaction": {
+            "hover": True,
+            "hoverConnectedEdges": True,
+            "tooltipDelay": 120,
+            "navigationButtons": False,
+            "zoomView": True,
+            "dragNodes": True,
+        },
+        "physics": {
+            "solver": "barnesHut",
+            "barnesHut": {
+                "gravitationalConstant": -75 * spacing,
+                "centralGravity": 0.25,
+                "springLength": spacing,
+                "springConstant": 0.05,
+                "damping": 0.09,
+                "avoidOverlap": 0.6,
+            },
+            "stabilization": {"iterations": 200},
+        },
+        "nodes": {
+            "shape": "dot",
+            "borderWidth": 2,
+            "borderWidthSelected": 3,
+            "font": {
+                "size": 14,
+                "color": "#2A2A2A",
+                "strokeWidth": 4,
+                "strokeColor": "#ffffff",
+                "face": "Helvetica",
+            },
+            "shadow": {"enabled": True, "size": 6, "x": 0, "y": 2, "color": "rgba(0,0,0,0.15)"},
+        },
+        "edges": {
+            "color": {"color": "#C2CAD6", "highlight": "#6B7B8F", "hover": "#6B7B8F"},
+            "width": 1.5,
+            "selectionWidth": 2,
             "smooth": {"type": "continuous", "roundness": 0.2},
-            "arrows": {"to": {"enabled": true, "scaleFactor": 0.5}},
-            "font": {"size": 12, "color": "#3E4654", "strokeWidth": 5, "strokeColor": "#ffffff",
-                     "align": "horizontal"}}
-}
-"""
+            "arrows": {"to": {"enabled": True, "scaleFactor": 0.5}},
+            "font": {
+                "size": 12,
+                "color": "#3E4654",
+                "strokeWidth": 5,
+                "strokeColor": "#ffffff",
+                "align": "horizontal",
+            },
+        },
+    }
+    return json.dumps(opts)
 
 
-def _to_html(nodes: list[dict], edges: list[dict]) -> str:
+# Lets vis.js lay the graph out, then turns physics off so nodes stop jiggling (freeze).
+_FREEZE_JS = (
+    'network.once("stabilizationIterationsDone", '
+    "function () { network.setOptions({ physics: false }); });"
+)
+
+
+def _to_html(
+    nodes: list[dict], edges: list[dict], *, spacing: int = 160, freeze: bool = False
+) -> str:
     """Build a self-contained vis.js HTML document from pre-computed nodes/edges.
-    cdn_resources='in_line' inlines the JS so the canvas renders offline."""
+    cdn_resources='in_line' inlines the JS so the canvas renders offline. `spacing` tunes the
+    layout; `freeze=True` stops the physics jiggle once the graph has laid itself out."""
     from pyvis.network import Network
 
     net = Network(
@@ -114,12 +155,15 @@ def _to_html(nodes: list[dict], edges: list[dict]) -> str:
         notebook=False,
         cdn_resources="in_line",
     )
-    net.set_options(_PYVIS_OPTIONS)
+    net.set_options(_options(spacing))
     for n in nodes:
         net.add_node(n["id"], label=n["label"], title=n["title"], size=n["size"], color=n["color"])
     for e in edges:
         net.add_edge(e["from"], e["to"], label=e["label"], title=e["title"])
-    return net.generate_html(notebook=False)
+    html = net.generate_html(notebook=False)
+    if freeze and "return network;" in html:
+        html = html.replace("return network;", _FREEZE_JS + "\n  return network;", 1)
+    return html
 
 
 def render_network(triples: list[list]) -> None:

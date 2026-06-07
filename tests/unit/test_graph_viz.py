@@ -1,3 +1,5 @@
+import json
+
 from ui import graph_viz
 from ui.graph_viz import COLOR_LEAF, COLOR_SUBJECT, MAX_TRIPLES, build_network_data
 
@@ -87,3 +89,24 @@ def test_node_scale_scales_size():
     scaled_size = {n["id"]: n["size"] for n in scaled}
     assert scaled_size["The Dark Knight"] == base_size["The Dark Knight"] * 2
     assert scaled_size["chaos"] == base_size["chaos"] * 2
+
+
+def test_options_spacing_mapping():
+    opts = json.loads(graph_viz._options(160))
+    bh = opts["physics"]["barnesHut"]
+    assert bh["springLength"] == 160
+    assert bh["gravitationalConstant"] == -12000
+    opts2 = json.loads(graph_viz._options(320))
+    bh2 = opts2["physics"]["barnesHut"]
+    assert bh2["springLength"] == 320
+    assert bh2["gravitationalConstant"] == -24000
+
+
+def test_freeze_injects_physics_off():
+    nodes, edges, _ = build_network_data(TRIPLES)
+    frozen = graph_viz._to_html(nodes, edges, freeze=True)
+    live = graph_viz._to_html(nodes, edges, freeze=False)
+    # The freeze snippet sets physics: false via network.once; this exact call is unique to our
+    # injection (the minified vis.js bundle only has "stabilizationIterationsDone" bare).
+    assert 'network.once("stabilizationIterationsDone"' in frozen
+    assert 'network.once("stabilizationIterationsDone"' not in live
