@@ -18,6 +18,7 @@ DEFAULT_MODELS = {
     "anthropic": ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5"],
 }
 _CUSTOM = "(custom…)"
+PATHS = ["auto", "sql", "graph", "fusion"]
 
 
 def _creds_payload(state) -> dict:
@@ -28,6 +29,11 @@ def _creds_payload(state) -> dict:
         if v:
             out[k] = v
     return out
+
+
+def _ask_body(question: str, state) -> dict:
+    """Build the /ask_trace request body: question + retrieval path + (non-empty) credentials."""
+    return {"question": question, "path": state.get("path", "auto"), **_creds_payload(state)}
 
 
 def _post(path: str, payload: dict) -> dict:
@@ -43,16 +49,16 @@ def _info() -> dict:
 
 
 def _ask(question: str) -> dict:
-    """Prefer the traced endpoint (rich steps + BYO credentials); fall back to plain /ask."""
-    body = {"question": question, **_creds_payload(st.session_state)}
+    """Prefer the traced endpoint (rich steps + BYO credentials + routing); fall back to /ask."""
+    body = _ask_body(question, st.session_state)
     try:
         r = requests.post(f"{API_URL}/ask_trace", json=body, timeout=180)
         if r.status_code == 200:
             return r.json()
     except Exception:  # noqa: BLE001
         pass
-    # Fallback only fires if /ask_trace is unreachable; include creds for body consistency.
-    return _post("/ask", {"question": question, **_creds_payload(st.session_state)})
+    # Fallback only fires if /ask_trace is unreachable; /ask ignores path/creds (server-key only).
+    return _post("/ask", body)
 
 
 def _show_table(columns, rows) -> None:
@@ -109,6 +115,13 @@ def _sidebar() -> None:
     else:
         st.sidebar.caption("No saved key. A pasted key is sent per request and not stored.")
 
+    st.sidebar.markdown("---")
+    path_choice = st.sidebar.selectbox(
+        "Retrieval path", PATHS, index=PATHS.index(st.session_state.get("path", "auto"))
+    )
+    st.session_state.path = path_choice
+    st.sidebar.caption("Auto routes SQL vs. graph; Graph needs no API key.")
+
 
 def render() -> None:
     _init_state()
@@ -147,12 +160,19 @@ def render() -> None:
             if resp.get("elapsed_ms") is not None:
                 st.caption(f"total backend time: {resp['elapsed_ms']:.0f} ms")
 
+        rpath = resp.get("path", "")
+        if rpath:
+            st.caption(f"path: {rpath}")
+
         if not resp.get("columns"):
             st.warning(resp.get("narrative", "No result."))
             if resp.get("sql"):
                 st.code(resp["sql"], language="sql")
         else:
-            st.code(resp["sql"], language="sql")
+            if resp.get("narrative") and "graph" in (rpath or ""):
+                st.info(resp["narrative"])  # cited graph / fusion narrative
+            if resp.get("sql"):
+                st.code(resp["sql"], language="sql")
             _show_table(resp["columns"], resp["rows"])
             spec = resp.get("chart_spec")
             if spec and spec.get("type") == "bar":

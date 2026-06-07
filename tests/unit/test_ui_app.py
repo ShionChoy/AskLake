@@ -1,4 +1,4 @@
-from ui.app import _creds_payload
+from ui.app import _ask_body, _creds_payload
 
 
 def test_creds_payload_omits_empty_fields():
@@ -13,3 +13,17 @@ def test_creds_payload_keeps_all_set_fields():
 
 def test_creds_payload_empty_when_unset():
     assert _creds_payload({}) == {}
+
+
+def test_ask_body_includes_question_path_and_creds():
+    state = {"path": "graph", "provider": "deepseek", "model": "", "api_key": "sk-X"}
+    assert _ask_body("hello", state) == {
+        "question": "hello",
+        "path": "graph",
+        "provider": "deepseek",
+        "api_key": "sk-X",
+    }
+
+
+def test_ask_body_defaults_path_to_auto():
+    assert _ask_body("hi", {})["path"] == "auto"
