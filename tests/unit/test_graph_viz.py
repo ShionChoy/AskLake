@@ -1,3 +1,4 @@
+from ui import graph_viz
 from ui.graph_viz import COLOR_LEAF, COLOR_SUBJECT, MAX_TRIPLES, build_network_data
 
 TRIPLES = [
@@ -69,3 +70,11 @@ def test_mixed_node_gets_subject_color():
     nodes, _, _ = build_network_data([["A", "R", "bridge", "s"], ["bridge", "R", "C", "s"]])
     color = {n["id"]: n["color"] for n in nodes}
     assert color["bridge"] == COLOR_SUBJECT
+
+
+def test_to_html_contains_labels():
+    nodes, edges, _ = build_network_data(TRIPLES)
+    html = graph_viz._to_html(nodes, edges)
+    assert isinstance(html, str) and len(html) > 0
+    assert "The Dark Knight" in html  # node label embedded in the vis.js data
+    assert "HAS_THEME" in html  # edge label embedded
