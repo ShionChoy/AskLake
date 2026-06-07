@@ -159,6 +159,7 @@ class _TracingGraphPath:
         n = len(rr.result.rows) if rr.result else 0
         self._log.add(
             "Search knowledge graph",
+            ok=True,
             ms=(time.perf_counter() - t0) * 1000,
             detail=f"{n} fact(s) retrieved via multi-hop graph traversal",
         )
