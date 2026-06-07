@@ -17,7 +17,7 @@ class DeepSeekProvider:
 
     def __init__(
         self,
-        model: str = "deepseek-chat",
+        model: str = "deepseek-v4-flash",
         api_key: str | None = None,
         base_url: str = _DEFAULT_BASE_URL,
         client: Any = None,

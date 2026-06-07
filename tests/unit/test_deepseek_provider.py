@@ -32,14 +32,14 @@ def test_is_llm_provider():
 
 def test_complete_builds_messages_and_parses_content():
     client = _FakeClient("SELECT title FROM movies")
-    provider = DeepSeekProvider(model="deepseek-chat", api_key="secret", client=client)
+    provider = DeepSeekProvider(model="deepseek-v4-flash", api_key="secret", client=client)
     out = provider.complete("write sql", system="you are a SQL writer")
     assert out == "SELECT title FROM movies"
     call = client.calls[0]
     assert call["url"].endswith("/chat/completions")
     assert call["headers"]["Authorization"] == "Bearer secret"
     body = call["json"]
-    assert body["model"] == "deepseek-chat"
+    assert body["model"] == "deepseek-v4-flash"
     assert body["messages"][0] == {"role": "system", "content": "you are a SQL writer"}
     assert body["messages"][-1] == {"role": "user", "content": "write sql"}
     assert body.get("temperature") == 0

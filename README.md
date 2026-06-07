@@ -76,7 +76,7 @@ Open **http://localhost:8501** in your browser.
 
 - A **⚙️ Model & API key** sidebar — choose the provider and model, paste your API key (masked), and **Save locally** / **Delete saved key**. Ask before entering a key and you'll get a friendly "enter your API key in the sidebar" prompt rather than an error.
 - A **Retrieval path** selector (Auto / SQL / Graph / Fusion). Auto routes structured questions to SQL and plot/theme questions to the graph (fusing both when relevant); Graph answers need no API key. Graph/fusion answers show a cited narrative (each fact tagged with its source plot).
-- A model caption (e.g. `model: deepseek-chat · provider: deepseek`) reflecting your selection.
+- A model caption (e.g. `model: deepseek-v4-flash · provider: deepseek`) reflecting your selection.
 - An **Ask in natural language** box — type a question such as *"Highest-rated sci-fi films after 2010 (top 10)"*.
 - The generated SQL, a **Backend processing steps** trace (schema retrieval → SQL generation → execution with ✅/❌ and timings; a red ❌ followed by a retry shows the self-correction loop in action), then a result table and bar chart.
 - A **Raw SQL console** for direct DuckDB queries.
@@ -114,7 +114,7 @@ A heuristic Router scores SQL-vs-graph features and dispatches to `SqlPath`, `Gr
 
 ## Evaluation
 
-Real run, DeepSeek `deepseek-chat` over a 12-case hand-authored IMDb gold set:
+Real run, DeepSeek `deepseek-v4-flash` over a 12-case hand-authored IMDb gold set:
 
 | system | n | valid-SQL | exec-accuracy | avg self-corrections |
 |---|---|---|---|---|

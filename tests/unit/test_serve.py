@@ -73,11 +73,11 @@ def test_ask_trace_uses_per_request_credentials(monkeypatch):
         json={
             "question": "q",
             "provider": "deepseek",
-            "model": "deepseek-reasoner",
+            "model": "deepseek-v4-pro",
             "api_key": "sk-test",
         },
     ).json()
-    assert captured == {"provider": "deepseek", "api_key": "sk-test", "model": "deepseek-reasoner"}
+    assert captured == {"provider": "deepseek", "api_key": "sk-test", "model": "deepseek-v4-pro"}
     assert out["rows"] == [[2]]  # used the per-request provider, not the default (which returns 1)
     assert out["model"]
 
@@ -106,7 +106,7 @@ def test_ask_trace_no_typed_key_shows_sidebar_prompt(monkeypatch):
     # The UI always sends `provider` from the selectbox even when no key is typed:
     out = c.post(
         "/ask_trace",
-        json={"question": "q", "provider": "deepseek", "model": "deepseek-chat"},
+        json={"question": "q", "provider": "deepseek", "model": "deepseek-v4-flash"},
     ).json()
     assert "sidebar" in out["narrative"].lower()  # friendly prompt, not a 401
 

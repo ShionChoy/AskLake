@@ -3,7 +3,7 @@ LIVE LLM and print the execution-accuracy comparison. This is the resume-grade r
 illustrative hermetic `make eval` numbers.
 
 Run it (manual; needs a key + the built IMDb parquet — `make build-imdb`):
-    DEEPSEEK_API_KEY=...  make eval-real     # uses DeepSeekProvider (deepseek-chat)
+    DEEPSEEK_API_KEY=...  make eval-real     # uses DeepSeekProvider (deepseek-v4-flash)
     ANTHROPIC_API_KEY=... make eval-real     # falls back to AnthropicProvider
 
 `run_real_eval` is provider/backend-agnostic (hermetically tested with FakeLLMProvider + an
@@ -91,7 +91,7 @@ def _make_provider() -> LLMProvider:
         from engine.llm.deepseek_provider import DeepSeekProvider
 
         return DeepSeekProvider(
-            model=os.environ.get("ASKLAKE_DEEPSEEK_MODEL", "deepseek-chat"), timeout=120.0
+            model=os.environ.get("ASKLAKE_DEEPSEEK_MODEL", "deepseek-v4-flash"), timeout=120.0
         )
     if os.environ.get("ANTHROPIC_API_KEY"):
         from engine.llm.anthropic_provider import AnthropicProvider

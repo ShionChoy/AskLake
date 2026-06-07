@@ -14,7 +14,7 @@ API_URL = os.environ.get("ASKLAKE_API_URL", "http://localhost:8000")
 
 PROVIDERS = ["deepseek", "anthropic"]
 DEFAULT_MODELS = {
-    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+    "deepseek": ["deepseek-v4-flash", "deepseek-v4-pro"],
     "anthropic": ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5"],
 }
 _CUSTOM = "(custom…)"

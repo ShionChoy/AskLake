@@ -20,10 +20,10 @@ def test_raises_when_nothing_configured(monkeypatch):
 def test_explicit_deepseek_key_and_model(monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("ASKLAKE_LLM_PROVIDER", raising=False)
-    p = make_provider("deepseek", api_key="sk-X", model="deepseek-reasoner")
+    p = make_provider("deepseek", api_key="sk-X", model="deepseek-v4-pro")
     assert type(p).__name__ == "DeepSeekProvider"
     assert p._api_key == "sk-X"
-    assert p._model == "deepseek-reasoner"
+    assert p._model == "deepseek-v4-pro"
 
 
 def test_explicit_deepseek_model_defaults_when_omitted(monkeypatch):
@@ -31,7 +31,7 @@ def test_explicit_deepseek_model_defaults_when_omitted(monkeypatch):
     monkeypatch.delenv("ASKLAKE_LLM_PROVIDER", raising=False)
     monkeypatch.delenv("ASKLAKE_DEEPSEEK_MODEL", raising=False)
     p = make_provider("deepseek", api_key="sk-X")
-    assert p._model == "deepseek-chat"
+    assert p._model == "deepseek-v4-flash"
 
 
 def test_explicit_anthropic_key_and_model(monkeypatch):

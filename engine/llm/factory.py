@@ -23,7 +23,7 @@ def make_provider(
         from engine.llm.deepseek_provider import DeepSeekProvider
 
         return DeepSeekProvider(
-            model=model or os.environ.get("ASKLAKE_DEEPSEEK_MODEL", "deepseek-chat"),
+            model=model or os.environ.get("ASKLAKE_DEEPSEEK_MODEL", "deepseek-v4-flash"),
             api_key=api_key,
             timeout=120.0,
         )

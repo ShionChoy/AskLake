@@ -9,17 +9,17 @@ def _isolate(monkeypatch, tmp_path):
 
 def test_save_then_load_roundtrips(monkeypatch, tmp_path):
     _isolate(monkeypatch, tmp_path)
-    credentials.save("deepseek", "deepseek-chat", "sk-X")
+    credentials.save("deepseek", "deepseek-v4-flash", "sk-X")
     assert credentials.load() == {
         "provider": "deepseek",
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "api_key": "sk-X",
     }
 
 
 def test_saved_file_is_0600(monkeypatch, tmp_path):
     _isolate(monkeypatch, tmp_path)
-    credentials.save("deepseek", "deepseek-chat", "sk-X")
+    credentials.save("deepseek", "deepseek-v4-flash", "sk-X")
     mode = stat.S_IMODE(credentials.path().stat().st_mode)
     assert mode == 0o600
     dir_mode = stat.S_IMODE(credentials.path().parent.stat().st_mode)
@@ -47,7 +47,7 @@ def test_load_non_dict_json_returns_empty(monkeypatch, tmp_path):
 
 def test_delete_removes_and_is_idempotent(monkeypatch, tmp_path):
     _isolate(monkeypatch, tmp_path)
-    credentials.save("deepseek", "deepseek-chat", "sk-X")
+    credentials.save("deepseek", "deepseek-v4-flash", "sk-X")
     assert credentials.path().exists()
     credentials.delete()
     assert not credentials.path().exists()
