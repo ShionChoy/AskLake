@@ -124,6 +124,47 @@ def _sidebar() -> None:
     st.sidebar.caption("Auto routes SQL vs. graph; Graph needs no API key.")
 
 
+def _render_result(resp: dict) -> None:
+    steps = resp.get("steps")
+    if steps:
+        st.subheader("Backend processing steps")
+        for i, s in enumerate(steps, start=1):
+            icon = "✅" if s.get("ok", True) else "❌"
+            ms = s.get("ms")
+            label = f"{icon} {i}. {s['step']}" + (f" — {ms:.0f} ms" if ms is not None else "")
+            with st.expander(label, expanded=not s.get("ok", True)):
+                if s.get("detail"):
+                    st.write(s["detail"])
+                if s.get("sql"):
+                    st.code(s["sql"], language="sql")
+        if resp.get("elapsed_ms") is not None:
+            st.caption(f"total backend time: {resp['elapsed_ms']:.0f} ms")
+
+    rpath = resp.get("path", "")
+    if rpath:
+        st.caption(f"path: {rpath}")
+
+    if not resp.get("columns"):
+        st.warning(resp.get("narrative", "No result."))
+        if resp.get("sql"):
+            st.code(resp["sql"], language="sql")
+    else:
+        if resp.get("narrative") and "graph" in (rpath or ""):
+            st.info(resp["narrative"])  # cited graph / fusion narrative
+        if resp.get("sql"):
+            st.code(resp["sql"], language="sql")
+        _show_table(resp["columns"], resp["rows"])
+        spec = resp.get("chart_spec")
+        if spec and spec.get("type") == "bar":
+            xi = resp["columns"].index(spec["x"])
+            yi = resp["columns"].index(spec["y"])
+            st.bar_chart({r[xi]: r[yi] for r in resp["rows"]})
+        triples = resp.get("graph_triples")
+        if triples:
+            with st.expander("🕸️ Network view", expanded=False):
+                graph_viz.render_network(triples)
+
+
 def render() -> None:
     _init_state()
     _sidebar()
@@ -144,46 +185,11 @@ def render() -> None:
     question = st.text_input("Question", value="Highest-rated sci-fi films after 2010 (top 10)")
     if st.button("Ask"):
         with st.spinner("Running the agent…"):
-            resp = _ask(question)
+            st.session_state["last_resp"] = _ask(question)
 
-        steps = resp.get("steps")
-        if steps:
-            st.subheader("Backend processing steps")
-            for i, s in enumerate(steps, start=1):
-                icon = "✅" if s.get("ok", True) else "❌"
-                ms = s.get("ms")
-                label = f"{icon} {i}. {s['step']}" + (f" — {ms:.0f} ms" if ms is not None else "")
-                with st.expander(label, expanded=not s.get("ok", True)):
-                    if s.get("detail"):
-                        st.write(s["detail"])
-                    if s.get("sql"):
-                        st.code(s["sql"], language="sql")
-            if resp.get("elapsed_ms") is not None:
-                st.caption(f"total backend time: {resp['elapsed_ms']:.0f} ms")
-
-        rpath = resp.get("path", "")
-        if rpath:
-            st.caption(f"path: {rpath}")
-
-        if not resp.get("columns"):
-            st.warning(resp.get("narrative", "No result."))
-            if resp.get("sql"):
-                st.code(resp["sql"], language="sql")
-        else:
-            if resp.get("narrative") and "graph" in (rpath or ""):
-                st.info(resp["narrative"])  # cited graph / fusion narrative
-            if resp.get("sql"):
-                st.code(resp["sql"], language="sql")
-            _show_table(resp["columns"], resp["rows"])
-            spec = resp.get("chart_spec")
-            if spec and spec.get("type") == "bar":
-                xi = resp["columns"].index(spec["x"])
-                yi = resp["columns"].index(spec["y"])
-                st.bar_chart({r[xi]: r[yi] for r in resp["rows"]})
-            triples = resp.get("graph_triples")
-            if triples:
-                with st.expander("🕸️ Network view", expanded=False):
-                    graph_viz.render_network(triples)
+    resp = st.session_state.get("last_resp")
+    if resp:
+        _render_result(resp)
 
     st.header("Raw SQL console")
     sql = st.text_area("SQL", value="SELECT 1 AS hello")
