@@ -14,6 +14,7 @@ class EvalCase:
     schema_sql: str  # DDL seeding the case database (DuckDB, in-memory)
     question: str
     gold_sql: str
+    tier: str = ""  # difficulty/family label: "aggregation" | "topn" | "multihop" (eval only)
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class SystemReport:
     valid_sql_rate: float
     execution_accuracy: float
     avg_attempts: float
+    per_tier: dict[str, float] | None = None  # exec-acc per tier (None when no tiers present)
 
 
 def _rows_match(a, b) -> bool:
