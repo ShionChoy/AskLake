@@ -80,9 +80,7 @@ def run_real_eval(
                 tier_correct[case.tier] = tier_correct.get(case.tier, 0) + int(ok)
         n = len(cases) or 1
         per_tier = (
-            {t: tier_correct[t] / tier_total[t] for t in sorted(tier_total)}
-            if tier_total
-            else None
+            {t: tier_correct[t] / tier_total[t] for t in sorted(tier_total)} if tier_total else None
         )
         reports.append(
             SystemReport(

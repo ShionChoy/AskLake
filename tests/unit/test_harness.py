@@ -11,10 +11,16 @@ def test_evalcase_tier_defaults_empty():
 
 
 def test_systemreport_per_tier_defaults_none():
-    r = SystemReport(name="baseline", n=3, valid_sql_rate=1.0, execution_accuracy=0.5, avg_attempts=0.0)
+    r = SystemReport(
+        name="baseline", n=3, valid_sql_rate=1.0, execution_accuracy=0.5, avg_attempts=0.0
+    )
     assert r.per_tier is None
     r2 = SystemReport(
-        name="agentic", n=3, valid_sql_rate=1.0, execution_accuracy=0.5, avg_attempts=0.0,
+        name="agentic",
+        n=3,
+        valid_sql_rate=1.0,
+        execution_accuracy=0.5,
+        avg_attempts=0.0,
         per_tier={"topn": 0.5},
     )
     assert r2.per_tier == {"topn": 0.5}
