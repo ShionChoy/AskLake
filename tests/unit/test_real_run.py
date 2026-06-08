@@ -63,3 +63,24 @@ def test_apply_duckdb_guardrails_runs_on_real_backend():
     apply_duckdb_guardrails(b)  # must not raise
     # backend still works after limits applied
     assert b.run_sql("SELECT 1").rows == [(1,)]
+
+
+def test_run_real_eval_reports_per_tier():
+    correct = "SELECT title FROM movies ORDER BY averageRating DESC LIMIT 1"
+    cases = [
+        EvalCase(name="a", schema_sql="", question="q", gold_sql=correct, tier="topn"),
+        EvalCase(name="b", schema_sql="", question="q", gold_sql=correct, tier="aggregation"),
+    ]
+    llm = FakeLLMProvider(responses=[correct])
+    reports = run_real_eval(llm, _backend(), cases, SemanticLayer())
+    for r in reports:
+        assert r.per_tier == {"topn": 1.0, "aggregation": 1.0}
+
+
+def test_run_real_eval_per_tier_none_when_untiered():
+    # The existing _CASES have tier="" -> no per-tier breakdown.
+    correct = "SELECT title FROM movies ORDER BY averageRating DESC LIMIT 1"
+    llm = FakeLLMProvider(responses=[correct])
+    reports = run_real_eval(llm, _backend(), _CASES, SemanticLayer())
+    for r in reports:
+        assert r.per_tier is None

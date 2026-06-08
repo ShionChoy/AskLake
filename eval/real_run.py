@@ -59,6 +59,8 @@ def run_real_eval(
     for name, runner in runners.items():
         valid = correct = 0
         attempts_total = 0
+        tier_correct: dict[str, int] = {}
+        tier_total: dict[str, int] = {}
         for case in cases:
             sql = None
             attempts = 0
@@ -73,7 +75,15 @@ def run_real_eval(
             valid += int(v)
             correct += int(ok)
             attempts_total += attempts
+            if case.tier:
+                tier_total[case.tier] = tier_total.get(case.tier, 0) + 1
+                tier_correct[case.tier] = tier_correct.get(case.tier, 0) + int(ok)
         n = len(cases) or 1
+        per_tier = (
+            {t: tier_correct[t] / tier_total[t] for t in sorted(tier_total)}
+            if tier_total
+            else None
+        )
         reports.append(
             SystemReport(
                 name=name,
@@ -81,6 +91,7 @@ def run_real_eval(
                 valid_sql_rate=valid / n,
                 execution_accuracy=correct / n,
                 avg_attempts=attempts_total / n,
+                per_tier=per_tier,
             )
         )
     return reports
@@ -122,6 +133,13 @@ def main() -> None:
             f"{r.name:<12}{r.n:>4}{r.valid_sql_rate:>8.0%}"
             f"{r.execution_accuracy:>10.0%}{r.avg_attempts:>13.2f}"
         )
+    tiers = sorted({c.tier for c in IMDB_GOLD if c.tier})
+    if tiers and any(r.per_tier for r in reports):
+        header = "by-tier exec-acc"
+        print(f"\n{header:<16}" + "".join(f"{t:>14}" for t in tiers))
+        for r in reports:
+            pt = r.per_tier or {}
+            print(f"{r.name:<16}" + "".join(f"{pt.get(t, 0.0):>13.0%} " for t in tiers))
     print("eval-real OK")
 
 
