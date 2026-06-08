@@ -18,7 +18,7 @@ AskLake answers plain-English questions through two grounded retrieval paths —
 - **Bring-your-own key in the browser** — paste an API key and pick the provider/model right in the UI sidebar, then optionally save it to a local `0600` file for next time (or delete it). Credentials are sent per request and **never persisted server-side**; the server boots fine with no key at all.
 - **Port-and-adapter engine** — 7 ports (`LLMProvider`, `StorageBackend`, `SchemaProvider`, `RetrievalPath`, `AgentGraph` nodes, `GovernanceHook`, `Observability`) keep every component swappable without touching existing adapters.
 - **Dataset-agnostic** — the engine never hardcodes column names; everything dataset-specific (connector, `semantic.yaml`, `governance.yaml`, graph ontology) lives under `datasets/<name>/`.
-- **Quantified eval harness** — execution-accuracy + valid-SQL-rate + self-correction count, with a 12-case hand-authored IMDb gold set and `make eval-real` for live LLM runs.
+- **Quantified eval harness** — execution-accuracy + valid-SQL-rate + self-correction count, with a 102-case stratified, tie-safe IMDb gold set and `make eval-real` for live LLM runs.
 
 ---
 
@@ -115,17 +115,25 @@ A heuristic Router scores SQL-vs-graph features and dispatches to `SqlPath`, `Gr
 
 ## Evaluation
 
-Real run, DeepSeek `deepseek-v4-flash` over a 12-case hand-authored IMDb gold set:
+Real run, DeepSeek `deepseek-v4-flash` over a **102-case** stratified IMDb gold set (aggregation / top-N / multi-hop) on a **~243K-movie** working set (`make build-imdb MIN_VOTES=25`), strict multiset-exact execution accuracy with tie-safe gold:
 
 | system | n | valid-SQL | exec-accuracy | avg self-corrections |
 |---|---|---|---|---|
-| baseline (single-prompt)  | 12 | 92%  | 42% | 0.00 |
-| agentic (self-correct)    | 12 | 100% | 50% | 0.08 |
-| semantic layer (grounded) | 12 | 100% | 50% | 0.00 |
+| baseline (single-prompt)  | 102 | 98%  | 49% | 0.00 |
+| agentic (self-correct)    | 102 | 100% | 40% | 0.02 |
+| semantic layer (grounded) | 102 | 100% | 74% | 0.01 |
 
-The self-correction loop lifts valid-SQL 92%→100% and execution accuracy 42%→50% over the naive baseline. The semantic layer reaches the same accuracy with zero self-corrections — grounding yields valid SQL on the first attempt. This is a 12-case real-data slice with strict multiset-exact scoring; the baseline→agentic delta is the signal.
+By difficulty tier (execution accuracy):
 
-Reproduce with `make eval-real` (requires a built parquet and an API key). A hermetic illustrative run (no key, no data) is available with `make eval`.
+| system | aggregation | top-N | multi-hop |
+|---|---|---|---|
+| baseline  | 66% | 36% | 42% |
+| agentic   | 66% | 18% | 32% |
+| semantic  | 68% | 70% | 84% |
+
+The **semantic layer is the decisive factor**: grounding the agent in curated table/column descriptions, metrics, and synonyms lifts overall execution accuracy **49% → 74%**, and the gain concentrates on the hard tiers — top-N **36% → 70%** and multi-hop **42% → 84%** — exactly where the right columns, join keys, and `category` filters are easy to hallucinate from raw schema alone. Self-correction in isolation (the `agentic` row, on raw schema) drives valid-SQL to 100% but does *not* beat the baseline on accuracy: bounded retries fix *execution* errors, yet can "correct" a would-be-right query into one that runs but returns the wrong rows. Grounding is what converts valid SQL into *correct* SQL. (Single live run; LLM sampling adds a few points of run-to-run noise — the n=102 stratification is what makes the ranking robust.)
+
+Reproduce with `make build-imdb MIN_VOTES=25 && make eval-real` (requires the raw IMDb TSVs and an API key). A hermetic illustrative run (no key, no data) is available with `make eval`.
 
 ---
 
