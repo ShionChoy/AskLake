@@ -122,3 +122,17 @@ def test_run_ablation_eval_five_rungs_with_cost_columns():
     by = {r.name: r for r in reports}
     assert by["+plan/sc"].avg_llm_calls > by["baseline"].avg_llm_calls
     assert by["grounded"].avg_llm_calls >= by["+plan/sc"].avg_llm_calls
+
+
+def test_eval_dataset_config_resolves_crm_and_imdb():
+    from eval.real_run import eval_dataset_config
+
+    imdb = eval_dataset_config("imdb")
+    assert imdb["parquet_dir"].endswith("imdb/parquet")
+    assert imdb["semantic_yaml"].endswith("imdb_cmu/semantic.yaml")
+    assert callable(imdb["gold"])
+
+    crm = eval_dataset_config("crm")
+    assert crm["parquet_dir"].endswith("crm/parquet")
+    assert crm["semantic_yaml"].endswith("crm_demo/semantic.yaml")
+    assert callable(crm["gold"])

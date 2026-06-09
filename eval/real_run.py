@@ -20,7 +20,6 @@ from engine.ports.storage import StorageBackend
 from engine.semantic.semantic_model import SemanticLayer, load_semantic_layer
 from eval._counting import CountingLLM
 from eval.harness import EvalCase, SystemReport, score_case
-from eval.imdb_gold import IMDB_GOLD, PARQUET_DIR
 from eval.systems import (
     run_agentic,
     run_baseline,
@@ -174,6 +173,26 @@ def run_ablation_eval(
     return reports
 
 
+def eval_dataset_config(name: str) -> dict:
+    """Resolve per-dataset eval wiring. Keeps real_run dataset-agnostic (selection is config)."""
+    if name == "crm":
+        from eval.crm_gold import CRM_GOLD, PARQUET_DIR
+
+        return {
+            "parquet_dir": PARQUET_DIR,
+            "semantic_yaml": "datasets/crm_demo/semantic.yaml",
+            "gold": lambda: CRM_GOLD,
+        }
+    from eval.imdb_gold import IMDB_GOLD
+    from eval.imdb_gold import PARQUET_DIR as IMDB_PARQUET
+
+    return {
+        "parquet_dir": IMDB_PARQUET,
+        "semantic_yaml": _SEMANTIC_YAML,
+        "gold": lambda: IMDB_GOLD,
+    }
+
+
 def _make_provider() -> LLMProvider:
     if os.environ.get("DEEPSEEK_API_KEY"):
         from engine.llm.deepseek_provider import DeepSeekProvider
@@ -192,28 +211,38 @@ def _make_provider() -> LLMProvider:
 
 
 def main() -> None:
+    import sys
     from pathlib import Path
 
-    if not Path(PARQUET_DIR).exists():
+    from engine.semantic.value_index import build_value_index
+
+    name = os.environ.get("ASKLAKE_EVAL_DATASET", "imdb")
+    if "--dataset" in sys.argv:
+        name = sys.argv[sys.argv.index("--dataset") + 1]
+    cfg = eval_dataset_config(name)
+    if not Path(cfg["parquet_dir"]).exists():
         raise SystemExit(
-            f"IMDb parquet not found at {PARQUET_DIR}. Build it first: make build-imdb"
+            f"{name} parquet not found at {cfg['parquet_dir']}. Build it first "
+            f"(make build-{'imdb MIN_VOTES=25' if name == 'imdb' else 'crm'})."
         )
-    backend = DuckDBBackend(parquet_dir=PARQUET_DIR)
+    backend = DuckDBBackend(parquet_dir=cfg["parquet_dir"])
     apply_duckdb_guardrails(backend)
-    layer = load_semantic_layer(_SEMANTIC_YAML)
+    layer = load_semantic_layer(cfg["semantic_yaml"])
+    value_index = build_value_index(layer, backend)
+    cases = cfg["gold"]()
     llm = _make_provider()
-    reports = run_real_eval(llm, backend, IMDB_GOLD, layer)
-    print(f"Real IMDb eval ({len(IMDB_GOLD)} cases), provider={type(llm).__name__}")
-    print(f"{'system':<12}{'n':>4}{'valid%':>9}{'exec-acc':>10}{'avg-retries':>13}")
+    reports = run_ablation_eval(llm, backend, cases, layer, value_index=value_index)
+
+    print(f"Ablation eval — dataset={name}, {len(cases)} cases, provider={type(llm).__name__}")
+    print(f"{'system':<14}{'n':>4}{'valid%':>9}{'exec-acc':>10}{'llm/q':>8}{'ms/q':>9}")
     for r in reports:
         print(
-            f"{r.name:<12}{r.n:>4}{r.valid_sql_rate:>8.0%}"
-            f"{r.execution_accuracy:>10.0%}{r.avg_attempts:>13.2f}"
+            f"{r.name:<14}{r.n:>4}{r.valid_sql_rate:>8.0%}{r.execution_accuracy:>10.0%}"
+            f"{r.avg_llm_calls:>8.1f}{r.avg_wall_ms:>9.0f}"
         )
-    tiers = sorted({c.tier for c in IMDB_GOLD if c.tier})
-    if tiers and any(r.per_tier for r in reports):
-        header = "by-tier exec-acc"
-        print(f"\n{header:<16}" + "".join(f"{t:>14}" for t in tiers))
+    tiers = sorted({c.tier for c in cases if c.tier})
+    if tiers:
+        print(f"\n{'by-tier exec-acc':<16}" + "".join(f"{t:>14}" for t in tiers))
         for r in reports:
             pt = r.per_tier or {}
             print(f"{r.name:<16}" + "".join(f"{pt.get(t, 0.0):>13.0%} " for t in tiers))

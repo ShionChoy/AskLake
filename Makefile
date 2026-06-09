@@ -1,4 +1,4 @@
-.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6 eval eval-real build-imdb build-graph serve ui clean
+.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6 eval eval-real build-imdb build-graph build-crm eval-real-crm serve ui clean
 
 dev:
 	docker compose --profile core up
@@ -44,6 +44,12 @@ eval:
 
 eval-real:
 	uv run python -m eval.real_run
+
+build-crm:
+	uv run python -c "from datasets.crm_demo.source import build_parquet; build_parquet('data/crm/parquet')"
+
+eval-real-crm:
+	uv run python -m eval.real_run --dataset crm
 
 serve:
 	uv run uvicorn api.serve:build_app --factory $(if $(wildcard .env),--env-file .env,) --host 0.0.0.0 --port 8000
