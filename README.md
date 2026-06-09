@@ -8,7 +8,7 @@ AskLake answers plain-English questions through two grounded retrieval paths —
 
 ## Features
 
-- **Agentic Text-to-SQL** — a LangGraph pipeline (SchemaRetriever → SQLWriter → Validator → SelfCorrect ≤N) that executes the generated SQL and feeds errors back to the model for bounded self-correction.
+- **Grounded Text-to-SQL** — the default LangGraph pipeline (schema-link + value-link → classify → plan → write K candidates → validate + self-consistency → critic → self-correct ≤N) grounds the model in real schema **and stored values**, samples multiple candidates and takes the majority result, and verifies the answer for *correctness*, not just executability. (The simpler self-correct-only `AgenticSqlPath` is kept as an additive sibling / eval baseline; `ASKLAKE_AGENT=agentic` selects it.)
 - **Semantic layer** — curated table/column descriptions, metrics, synonyms (e.g. "score" → `averageRating`), and few-shot examples ground the LLM and eliminate whole categories of hallucinated column names.
 - **GraphRAG second path** — multi-hop BFS over a knowledge graph with traceable citations; answers plot/theme questions that pure SQL cannot.
 - **Interactive network view** — graph and fusion answers also render their triples as a draggable, zoomable pyvis network (relation-labeled edges, hubs sized by degree, source citations on hover) in a 🕸️ Network view expander beneath the table. Adjustable in-app: node size, layout spacing/density, and a freeze-layout toggle.
@@ -18,7 +18,7 @@ AskLake answers plain-English questions through two grounded retrieval paths —
 - **Bring-your-own key in the browser** — paste an API key and pick the provider/model right in the UI sidebar, then optionally save it to a local `0600` file for next time (or delete it). Credentials are sent per request and **never persisted server-side**; the server boots fine with no key at all.
 - **Port-and-adapter engine** — 7 ports (`LLMProvider`, `StorageBackend`, `SchemaProvider`, `RetrievalPath`, `AgentGraph` nodes, `GovernanceHook`, `Observability`) keep every component swappable without touching existing adapters.
 - **Dataset-agnostic** — the engine never hardcodes column names; everything dataset-specific (connector, `semantic.yaml`, `governance.yaml`, graph ontology) lives under `datasets/<name>/`.
-- **Quantified eval harness** — execution-accuracy + valid-SQL-rate + self-correction count, with a 102-case stratified, tie-safe IMDb gold set and `make eval-real` for live LLM runs.
+- **Quantified eval harness** — a five-rung ablation (baseline → +semantic → +value-link → +plan/self-consistency → grounded) reporting execution-accuracy, valid-SQL-rate, and cost columns per difficulty tier, run on a 102-case tie-safe IMDb gold set **and** a synthetic CRM second dataset (a generalization proof: same engine, no hand-authored few-shots) via `make eval-real` / `make eval-real-crm`.
 
 ---
 
@@ -95,13 +95,15 @@ The engine under `engine/` is built around 7 ports with swappable adapters:
 | `LLMProvider` | `DeepSeekProvider` (OpenAI-compatible; `AnthropicProvider` is a drop-in) |
 | `StorageBackend` | `DuckDBBackend` (embedded, 2 GB query memory cap) |
 | `SchemaProvider` | `SemanticLayerProvider` (grounded; `RawSchemaProvider` kept as baseline) |
-| `RetrievalPath` | `AgenticSqlPath` + `GraphRagPath`, dispatched by `Router` |
+| `RetrievalPath` | `GroundedSqlPath` + `GraphRagPath`, dispatched by `Router` (`AgenticSqlPath` kept as baseline; `ASKLAKE_AGENT=agentic` selects it) |
 | `GovernanceHook` | `PolicyGovernance` (RBAC, PII masking, cost guardrails) |
 | `Observability` | `PrometheusObservability` (opt-in; no-op by default) |
 
-### Agentic Text-to-SQL
+### Grounded Text-to-SQL
 
-The LangGraph agent runs: **SchemaRetriever → SQLWriter → Validator → SelfCorrect (≤N) → END**. The Validator executes the SQL against DuckDB; on failure it injects the error message back into the model context. Example: the model first writes `SELECT title, rating FROM movies` (no such column); the validator's error (`Referenced column "rating" not found`) triggers a correction to `SELECT title, averageRating FROM movies`, which succeeds.
+The default agent (`GroundedSqlPath`) runs: **link (schema + value-linking) → classify (difficulty) → plan (hard questions) → write K candidates → validate + self-consistency → critic → self-correct (≤N) → END**. *link* grounds the model in the semantic layer **and real stored values** (the question token "sci fi" is pinned to `genres LIKE '%Sci-Fi%'`; a name is resolved against the column to its canonical spelling); *write* samples K candidates for hard (top-N / multi-hop) questions, and *validate + self-consistency* executes them all and takes the **majority result set**, discarding queries that run but return different (wrong) rows; the *critic* checks the chosen result for correctness (0 rows, missing `ORDER BY`/`LIMIT`, …) and only then triggers a bounded self-correction.
+
+The simpler self-correct-only path (`AgenticSqlPath`: **SQLWriter → Validator → SelfCorrect ≤N**, retrying only on execution *errors*) is kept as an additive sibling and the eval baseline. Example: the model first writes `SELECT title, rating FROM movies` (no such column); the validator's error (`Referenced column "rating" not found`) triggers a correction to `SELECT title, averageRating FROM movies`. As the eval shows, this loop fixes *executability* but not *correctness* — grounding does that.
 
 ### GraphRAG
 
@@ -115,25 +117,35 @@ A heuristic Router scores SQL-vs-graph features and dispatches to `SqlPath`, `Gr
 
 ## Evaluation
 
-Real run, DeepSeek `deepseek-v4-flash` over a **102-case** stratified IMDb gold set (aggregation / top-N / multi-hop) on a **~243K-movie** working set (`make build-imdb MIN_VOTES=25`), strict multiset-exact execution accuracy with tie-safe gold:
+A five-rung **ablation** — each rung adds one capability over the previous — run live with DeepSeek `deepseek-v4-flash`, strict multiset-exact execution accuracy with tie-safe gold, reported per difficulty tier with cost columns (`llm/q` = mean LLM calls per question, `ms/q` = mean wall-clock). Run on **two datasets with the same engine and zero engine changes** — only `datasets/<name>/` config differs.
 
-| system | n | valid-SQL | exec-accuracy | avg self-corrections |
-|---|---|---|---|---|
-| baseline (single-prompt)  | 102 | 98%  | 49% | 0.00 |
-| agentic (self-correct)    | 102 | 100% | 40% | 0.02 |
-| semantic layer (grounded) | 102 | 100% | 74% | 0.01 |
+**IMDb** — 102-case stratified gold set on a ~243K-movie working set (`make build-imdb MIN_VOTES=25`):
 
-By difficulty tier (execution accuracy):
+| system | valid-SQL | exec-acc | llm/q | ms/q | aggregation | top-N | multi-hop |
+|---|---|---|---|---|---|---|---|
+| baseline (raw, single-prompt) | 98%  | 38% | 1.0 | 5200 | 66% | 24% | 19% |
+| +semantic (grounded + self-correct) | 100% | **73%** | 1.0 | 5600 | 66% | 61% | 94% |
+| +value-link | 100% | 72% | 1.0 | 5600 | 66% | 64% | 87% |
+| +plan/self-consistency | 100% | 74% | 4.0 | 16900 | 66% | 67% | 90% |
+| grounded (+ critic) | 100% | 75% | 4.2 | 16100 | 66% | 67% | 94% |
 
-| system | aggregation | top-N | multi-hop |
-|---|---|---|---|
-| baseline  | 66% | 36% | 42% |
-| agentic   | 66% | 18% | 32% |
-| semantic  | 68% | 70% | 84% |
+**CRM** — a synthetic second dataset (`datasets/crm_demo/`, 11-case gold) the engine was **never tuned for, with no hand-authored few-shots**:
 
-The **semantic layer is the decisive lever.** Grounding the agent in curated table/column descriptions, metrics, and synonyms lifts overall execution accuracy **49% → 74%**, concentrated on the hard tiers — top-N **36% → 70%** and multi-hop **42% → 84%** — exactly where the right column, join key, or `category` filter is easy to hallucinate from raw schema. The cleanest read is the `agentic` → `semantic` pair: identical self-correction loop and retry budget, only raw schema vs. semantic layer differs, so the **+34 points is grounding alone**. By contrast, self-correction in isolation (`baseline` → `agentic`, both on raw schema) lifts **valid-SQL 98% → 100%** but is accuracy-neutral *by design*: the loop only retries on execution *errors*, never on a query that runs yet returns the wrong rows — the dominant failure mode. It buys executability, not correctness; the baseline-vs-agentic accuracy gap (49% vs 40%) is within run-to-run sampling noise (±~7 pts at n≈100), i.e. statistically tied. Grounding is what turns valid SQL into *correct* SQL. (Single live run; the n=102 stratification is what makes the ranking — semantic ≫ baseline ≈ agentic — robust, not any single cell.)
+| system | valid-SQL | exec-acc | llm/q | ms/q | aggregation | top-N | multi-hop |
+|---|---|---|---|---|---|---|---|
+| baseline (raw, single-prompt) | 100% | 55% | 1.0 | 3800 | 75% | 50% | 40% |
+| +semantic | 100% | 91% | 1.0 | 2300 | 100% | 50% | 100% |
+| +value-link | 100% | 82% | 1.0 | 2300 | 100% | 50% | 80% |
+| +plan/self-consistency | 100% | 82% | 1.8 | 5100 | 100% | 50% | 80% |
+| grounded (+ critic) | 100% | **100%** | 1.8 | 4300 | 100% | 100% | 100% |
 
-Reproduce with `make build-imdb MIN_VOTES=25 && make eval-real` (requires the raw IMDb TSVs and an API key). A hermetic illustrative run (no key, no data) is available with `make eval`.
+**Grounding is the decisive lever on both datasets.** A semantic layer (curated descriptions, metrics, synonyms) lifts overall execution accuracy **38% → 73%** on IMDb and **55% → 91%** on CRM, concentrated on the hard tiers (IMDb multi-hop 19% → 94%, top-N 24% → 61%) and flat on aggregation (66% throughout — it needs no domain mapping). Self-correction in that step buys **executability** (valid-SQL 98% → 100%), not accuracy: the loop only retries on execution *errors*, never on a query that runs yet returns wrong rows.
+
+**The heavier machinery earns its keep where there are no few-shots.** On hand-tuned IMDb, value-linking, planner decomposition, and self-consistency are roughly accuracy-neutral over the semantic layer (73% → 75%) while costing **4× the LLM calls and ~3× the latency** — the curated few-shots already carry it. But on **CRM, which has no few-shots**, the full grounded path is what reaches **100%** (vs 91% for the semantic layer alone): the reflexion critic closes the top-N tier 50% → 100%. That is the generalization payoff — the mechanisms that look redundant on a tuned dataset are exactly what get the last mile on a brand-new one, with the cost made explicit so the trade-off is visible.
+
+Caveats (honest): CRM n=11 is small, so the intermediate rungs are noisy (the robust signal is baseline ≪ grounded); both are single live runs; K candidates are generated sequentially in this version (the `ms/q` columns reflect that — parallel fan-out is a latency follow-up that does not change accuracy).
+
+Reproduce: `make build-imdb MIN_VOTES=25 && make eval-real` (IMDb) and `make build-crm && make eval-real-crm` (CRM) — both need an API key; IMDb also needs the raw TSVs. A hermetic illustrative run (no key, no data) is available with `make eval`.
 
 ---
 
