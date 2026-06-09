@@ -1,13 +1,17 @@
-"""Real headline eval: run baseline / agentic / semantic over the real IMDb gold set against a
-LIVE LLM and print the execution-accuracy comparison. This is the resume-grade run behind the
+"""Real headline eval. The CLI (`make eval-real`) runs the five-rung ABLATION ladder
+(baseline -> +semantic -> +value-link -> +plan/sc -> grounded) over a configured dataset against
+a LIVE LLM, printing per-tier exec-accuracy + cost columns. Defaults to IMDb; `--dataset crm`
+selects the synthetic CRM set (the generalization proof). This is the resume-grade run behind the
 illustrative hermetic `make eval` numbers.
 
-Run it (manual; needs a key + the built IMDb parquet — `make build-imdb`):
-    DEEPSEEK_API_KEY=...  make eval-real     # uses DeepSeekProvider (deepseek-v4-flash)
-    ANTHROPIC_API_KEY=... make eval-real     # falls back to AnthropicProvider
+Run it (manual; needs a key + a built parquet):
+    DEEPSEEK_API_KEY=...  make eval-real        # IMDb ablation (build-imdb MIN_VOTES=25 first)
+    DEEPSEEK_API_KEY=...  make eval-real-crm    # CRM ablation (build-crm first)
+    ANTHROPIC_API_KEY=... make eval-real        # Anthropic fallback
 
-`run_real_eval` is provider/backend-agnostic (hermetically tested with FakeLLMProvider + an
-in-memory backend); only the CLI wires the live provider + the IMDb parquet backend."""
+`run_real_eval` (the original 3-system comparison) and `run_ablation_eval` are both
+provider/backend-agnostic (hermetically tested with FakeLLMProvider + an in-memory backend);
+only the CLI wires the live provider + the parquet backend."""
 
 from __future__ import annotations
 
@@ -115,12 +119,18 @@ def run_ablation_eval(
     """Five-rung ablation (baseline -> +semantic -> +value-link -> +plan/sc -> grounded), per tier,
     with avg LLM-calls + wall-ms cost columns. Each case is wrapped in a CountingLLM and timed; a
     failing case (1 retry) is scored 0 rather than aborting the run (matches run_real_eval)."""
+    # Each rung adds one capability over the previous. Two steps are compound by design (they
+    # match coherent system boundaries, not strict single-variable ablation): "+semantic" bundles
+    # self-correction + semantic-layer grounding (the P2 system), and "+plan/sc" bundles Planner
+    # decomposition + K-candidate self-consistency. "+value-link" and "grounded" are single-step.
     runners = {
         "baseline": lambda c, m: run_baseline(m, backend, c.question),
+        # compound: self-correction loop + semantic layer (vs baseline's raw single-shot)
         "+semantic": lambda c, m: run_semantic(m, backend, c.question, layer, max_retries),
         "+value-link": lambda c, m: run_value_link(
             m, backend, c.question, layer, value_index, max_retries
         ),
+        # compound: Planner decomposition + K-candidate self-consistency added together
         "+plan/sc": lambda c, m: run_plan_sc(
             m, backend, c.question, layer, value_index, k_candidates, max_retries
         ),
