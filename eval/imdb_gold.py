@@ -393,7 +393,7 @@ def _avg_rating_per_year_since(since: int) -> EvalCase:
             " Include the number of titles per year."
         ),
         gold_sql=(
-            "SELECT tb.startYear, ROUND(AVG(tr.averageRating), 2) AS avg_rating,"
+            "SELECT tb.startYear, AVG(tr.averageRating) AS avg_rating,"
             " COUNT(*) AS num_titles\n"
             "FROM title_basics tb\n"
             "JOIN title_ratings tr ON tb.tconst = tr.tconst\n"
@@ -470,7 +470,7 @@ def _avg_rating_per_decade_since(since: int) -> EvalCase:
         ),
         gold_sql=(
             "SELECT CAST(CAST(tb.startYear AS INT)/10 AS INT)*10 AS decade,\n"
-            "       ROUND(AVG(tr.averageRating), 2) AS avg_rating,\n"
+            "       AVG(tr.averageRating) AS avg_rating,\n"
             "       COUNT(*) AS num_titles\n"
             "FROM title_basics tb\n"
             "JOIN title_ratings tr ON tb.tconst = tr.tconst\n"
@@ -541,7 +541,7 @@ _AGGREGATION_CASES: list[EvalCase] = (
                 "What is the average runtime in minutes of horror movies with a known runtime?"
             ),
             gold_sql=(
-                "SELECT ROUND(AVG(runtimeMinutes), 1) AS avg_runtime_minutes\n"
+                "SELECT AVG(runtimeMinutes) AS avg_runtime_minutes\n"
                 "FROM title_basics\n"
                 "WHERE genres LIKE '%Horror%' AND runtimeMinutes IS NOT NULL"
             ),
@@ -556,15 +556,15 @@ _AGGREGATION_CASES: list[EvalCase] = (
             ),
             gold_sql=(
                 "SELECT 'Action' AS genre,"
-                " ROUND(AVG(runtimeMinutes), 1) AS avg_runtime_minutes\n"
+                " AVG(runtimeMinutes) AS avg_runtime_minutes\n"
                 "FROM title_basics WHERE genres LIKE '%Action%'"
                 " AND runtimeMinutes IS NOT NULL\n"
                 "UNION ALL\n"
-                "SELECT 'Drama', ROUND(AVG(runtimeMinutes), 1)\n"
+                "SELECT 'Drama', AVG(runtimeMinutes)\n"
                 "FROM title_basics WHERE genres LIKE '%Drama%'"
                 " AND runtimeMinutes IS NOT NULL\n"
                 "UNION ALL\n"
-                "SELECT 'Comedy', ROUND(AVG(runtimeMinutes), 1)\n"
+                "SELECT 'Comedy', AVG(runtimeMinutes)\n"
                 "FROM title_basics WHERE genres LIKE '%Comedy%'"
                 " AND runtimeMinutes IS NOT NULL"
             ),
@@ -619,7 +619,7 @@ _AGGREGATION_CASES: list[EvalCase] = (
                 "What is the average rating and number of movies for each year from 2015 to 2020?"
             ),
             gold_sql=(
-                "SELECT tb.startYear, ROUND(AVG(tr.averageRating), 2) AS avg_rating,"
+                "SELECT tb.startYear, AVG(tr.averageRating) AS avg_rating,"
                 " COUNT(*) AS num_titles\n"
                 "FROM title_basics tb\n"
                 "JOIN title_ratings tr ON tb.tconst = tr.tconst\n"
@@ -678,7 +678,7 @@ _AGGREGATION_CASES: list[EvalCase] = (
                 "What is the average rating of drama movies that have at least 10,000 votes?"
             ),
             gold_sql=(
-                "SELECT ROUND(AVG(tr.averageRating), 2) AS avg_rating\n"
+                "SELECT AVG(tr.averageRating) AS avg_rating\n"
                 "FROM title_basics tb\n"
                 "JOIN title_ratings tr ON tb.tconst = tr.tconst\n"
                 "WHERE tb.genres LIKE '%Drama%' AND tr.numVotes >= 10000"
@@ -692,7 +692,7 @@ _AGGREGATION_CASES: list[EvalCase] = (
                 "What is the average rating of horror movies that have at least 10,000 votes?"
             ),
             gold_sql=(
-                "SELECT ROUND(AVG(tr.averageRating), 2) AS avg_rating\n"
+                "SELECT AVG(tr.averageRating) AS avg_rating\n"
                 "FROM title_basics tb\n"
                 "JOIN title_ratings tr ON tb.tconst = tr.tconst\n"
                 "WHERE tb.genres LIKE '%Horror%' AND tr.numVotes >= 10000"

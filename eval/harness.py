@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -29,9 +29,48 @@ class SystemReport:
     avg_wall_ms: float = 0.0  # mean wall-clock ms per case (latency signal)
 
 
+_REL_TOL = 1e-3
+_ABS_TOL = 1e-9
+
+
+def _is_number(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _whole(v) -> bool:
+    return _is_number(v) and float(v).is_integer()
+
+
+def _cell_eq(a, b) -> bool:
+    if _is_number(a) and _is_number(b):
+        if _whole(a) and _whole(b):
+            return float(a) == float(b)  # counts / years: exact, never masked
+        return math.isclose(float(a), float(b), rel_tol=_REL_TOL, abs_tol=_ABS_TOL)
+    return a == b
+
+
+def _row_eq(r1: tuple, r2: tuple) -> bool:
+    return len(r1) == len(r2) and all(_cell_eq(x, y) for x, y in zip(r1, r2, strict=False))
+
+
 def _rows_match(a, b) -> bool:
-    # Execution Accuracy compares result sets as multisets (order-insensitive).
-    return Counter(map(tuple, a)) == Counter(map(tuple, b))
+    """Execution Accuracy: order-insensitive multiset match. Numeric cells compare with a
+    relative tolerance (rel_tol 1e-3) so a correct aggregate scored at a different precision
+    still matches; whole numbers (counts/years) and non-numeric cells compare exactly, so real
+    errors (off-by-one counts, wrong labels, wrong cardinality) are never masked."""
+    rows_a = [tuple(r) for r in a]
+    rows_b = [tuple(r) for r in b]
+    if len(rows_a) != len(rows_b):
+        return False
+    used = [False] * len(rows_b)
+    for r1 in rows_a:
+        for j, r2 in enumerate(rows_b):
+            if not used[j] and _row_eq(r1, r2):
+                used[j] = True
+                break
+        else:
+            return False
+    return True
 
 
 def score_case(candidate_sql: str, gold_sql: str, backend: StorageBackend) -> tuple[bool, bool]:

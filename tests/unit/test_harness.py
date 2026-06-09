@@ -52,3 +52,31 @@ def test_counting_llm_counts_and_delegates():
     assert c.complete("a") == "SELECT 1"
     assert c.complete("b", system="s") == "SELECT 2"
     assert c.calls == 2
+
+
+def test_rows_match_tolerates_float_rounding():
+    from eval.harness import _rows_match
+
+    # unrounded correct AVG vs rounded gold -> should MATCH
+    assert _rows_match([(6.833408769448375,)], [(6.83,)])
+    assert _rows_match([(90.0857,)], [(90.1,)])  # round-to-1-decimal difference
+    # genuinely different value -> should NOT match
+    assert not _rows_match([(6.79,)], [(6.83,)])
+
+
+def test_rows_match_counts_are_exact_not_masked():
+    from eval.harness import _rows_match
+
+    # whole numbers (counts) must compare exactly: off-by-one is a real error, not noise
+    assert not _rows_match([(2562,)], [(2560,)])
+    assert _rows_match([(2560,)], [(2560,)])
+    # even when expressed as a whole-valued float, off-by-one is not masked
+    assert not _rows_match([(2562.0,)], [(2560,)])
+
+
+def test_rows_match_order_insensitive_and_nonnumeric_exact():
+    from eval.harness import _rows_match
+
+    assert _rows_match([(2001, 5.99), (2000, 5.96)], [(2000, 5.962), (2001, 5.991)])
+    assert not _rows_match([("Drama", 6.83)], [("Comedy", 6.83)])  # label must match exactly
+    assert not _rows_match([(1, 2)], [(1, 2), (3, 4)])  # cardinality must match

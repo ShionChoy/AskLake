@@ -73,3 +73,14 @@ def test_multihop_limit_cases_are_tie_safe():
         rows = backend.run_sql(probe_sql).rows
         if len(rows) > n:  # a cut exists only when more than N rows qualify
             assert rows[n - 1][0] > rows[n][0], f"boundary tie in multihop case {name}"
+
+
+def test_aggregation_golds_have_no_gratuitous_round():
+    from eval.imdb_gold import IMDB_GOLD
+
+    offenders = [
+        c.name for c in IMDB_GOLD if c.tier == "aggregation" and "ROUND(" in c.gold_sql.upper()
+    ]
+    assert offenders == [], (
+        f"aggregation golds should return canonical (unrounded) aggregates: {offenders}"
+    )
