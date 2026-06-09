@@ -22,3 +22,13 @@ def test_imdb_governance_policy_parses():
     assert "public" in policy.mask_roles
     assert policy.require_limit is True
     assert policy.row_filters["public"][0].column == "titleType"
+
+
+def test_imdb_semantic_has_link_annotations():
+    from engine.semantic.semantic_model import load_semantic_layer
+
+    layer = load_semantic_layer("datasets/imdb_cmu/semantic.yaml")
+    links = {c.name: c.link for t in layer.tables for c in t.columns if c.link}
+    assert links.get("genres") == "categorical"
+    assert links.get("category") == "categorical"
+    assert links.get("primaryName") == "entity"

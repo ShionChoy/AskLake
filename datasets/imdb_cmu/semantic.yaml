@@ -7,7 +7,7 @@ tables:
       - {name: titleType, description: Kind of title, e.g. movie, short, tvSeries.}
       - {name: primaryTitle, description: The film's display title.}
       - {name: startYear, type: INTEGER, description: Release year.}
-      - {name: genres, description: Comma-separated genres, e.g. "Sci-Fi,Drama".}
+      - {name: genres, description: Comma-separated genres, e.g. "Sci-Fi,Drama"., link: categorical}
   - name: title_ratings
     description: IMDb rating aggregates per title.
     columns:
@@ -20,7 +20,7 @@ tables:
       join to title_principals on nconst.
     columns:
       - {name: nconst, description: Person id.}
-      - {name: primaryName, description: Person's display name.}
+      - {name: primaryName, description: Person's display name., link: entity}
       - {name: birthYear, type: INTEGER, description: Year of birth (PII).}
       - {name: deathYear, type: INTEGER, description: Year of death (PII).}
   - name: title_principals
@@ -31,7 +31,7 @@ tables:
     columns:
       - {name: tconst, description: Title id; joins to title_basics and title_ratings.}
       - {name: nconst, description: Person id; joins to name_basics.}
-      - {name: category, description: "Role on the title: actor, actress, director, writer, producer, composer, self, etc."}
+      - {name: category, description: "Role on the title: actor, actress, director, writer, producer, composer, self, etc.", link: categorical}
       - {name: ordering, type: INTEGER, description: Billing order of the person on that title.}
   - name: title_crew
     description: Directors and writers per title.
