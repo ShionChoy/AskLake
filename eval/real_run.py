@@ -12,14 +12,23 @@ in-memory backend); only the CLI wires the live provider + the IMDb parquet back
 from __future__ import annotations
 
 import os
+import time
 
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 from engine.ports.llm import LLMProvider
 from engine.ports.storage import StorageBackend
 from engine.semantic.semantic_model import SemanticLayer, load_semantic_layer
+from eval._counting import CountingLLM
 from eval.harness import EvalCase, SystemReport, score_case
 from eval.imdb_gold import IMDB_GOLD, PARQUET_DIR
-from eval.systems import run_agentic, run_baseline, run_semantic
+from eval.systems import (
+    run_agentic,
+    run_baseline,
+    run_grounded,
+    run_plan_sc,
+    run_semantic,
+    run_value_link,
+)
 
 _SEMANTIC_YAML = "datasets/imdb_cmu/semantic.yaml"
 
@@ -90,6 +99,76 @@ def run_real_eval(
                 execution_accuracy=correct / n,
                 avg_attempts=attempts_total / n,
                 per_tier=per_tier,
+            )
+        )
+    return reports
+
+
+def run_ablation_eval(
+    llm: LLMProvider,
+    backend: StorageBackend,
+    cases: list[EvalCase],
+    layer: SemanticLayer,
+    value_index=None,
+    k_candidates: int = 3,
+    max_retries: int = 2,
+) -> list[SystemReport]:
+    """Five-rung ablation (baseline -> +semantic -> +value-link -> +plan/sc -> grounded), per tier,
+    with avg LLM-calls + wall-ms cost columns. Each case is wrapped in a CountingLLM and timed; a
+    failing case (1 retry) is scored 0 rather than aborting the run (matches run_real_eval)."""
+    runners = {
+        "baseline": lambda c, m: run_baseline(m, backend, c.question),
+        "+semantic": lambda c, m: run_semantic(m, backend, c.question, layer, max_retries),
+        "+value-link": lambda c, m: run_value_link(
+            m, backend, c.question, layer, value_index, max_retries
+        ),
+        "+plan/sc": lambda c, m: run_plan_sc(
+            m, backend, c.question, layer, value_index, k_candidates, max_retries
+        ),
+        "grounded": lambda c, m: run_grounded(
+            m, backend, c.question, layer, value_index, k_candidates, max_retries
+        ),
+    }
+    reports: list[SystemReport] = []
+    for name, runner in runners.items():
+        valid = correct = attempts_total = calls_total = 0
+        wall_total = 0.0
+        tier_correct: dict[str, int] = {}
+        tier_total: dict[str, int] = {}
+        for case in cases:
+            counting = CountingLLM(llm)
+            v = ok = False
+            attempts = 0
+            t0 = time.perf_counter()
+            for _attempt in range(2):  # 1 try + 1 retry (transient API robustness)
+                try:
+                    sql, attempts = runner(case, counting)
+                    v, ok = score_case(sql, case.gold_sql, backend)
+                    break
+                except Exception:  # noqa: BLE001
+                    sql, attempts, v, ok = None, 0, False, False
+            wall_total += (time.perf_counter() - t0) * 1000
+            calls_total += counting.calls
+            valid += int(v)
+            correct += int(ok)
+            attempts_total += attempts
+            if case.tier:
+                tier_total[case.tier] = tier_total.get(case.tier, 0) + 1
+                tier_correct[case.tier] = tier_correct.get(case.tier, 0) + int(ok)
+        n = len(cases) or 1
+        per_tier = (
+            {t: tier_correct[t] / tier_total[t] for t in sorted(tier_total)} if tier_total else None
+        )
+        reports.append(
+            SystemReport(
+                name=name,
+                n=len(cases),
+                valid_sql_rate=valid / n,
+                execution_accuracy=correct / n,
+                avg_attempts=attempts_total / n,
+                per_tier=per_tier,
+                avg_llm_calls=calls_total / n,
+                avg_wall_ms=wall_total / n,
             )
         )
     return reports

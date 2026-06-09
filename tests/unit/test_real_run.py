@@ -84,3 +84,41 @@ def test_run_real_eval_per_tier_none_when_untiered():
     reports = run_real_eval(llm, _backend(), _CASES, SemanticLayer())
     for r in reports:
         assert r.per_tier is None
+
+
+def test_run_ablation_eval_five_rungs_with_cost_columns():
+    from engine.semantic.semantic_model import ColumnDef, SemanticLayer, TableDef
+    from engine.semantic.value_index import build_value_index
+    from eval.real_run import run_ablation_eval
+
+    backend = _backend()
+    layer = SemanticLayer(
+        tables=(
+            TableDef(
+                name="movies",
+                columns=(ColumnDef("title"), ColumnDef("averageRating", type="DOUBLE")),
+            ),
+        )
+    )
+    vidx = build_value_index(layer, backend)
+    correct = "SELECT title FROM movies ORDER BY averageRating DESC LIMIT 1"
+    cases = [
+        EvalCase(
+            name="t", schema_sql="", question="highest rated movie", gold_sql=correct, tier="topn"
+        )
+    ]
+    llm = FakeLLMProvider(responses=[correct])
+    reports = run_ablation_eval(llm, backend, cases, layer, value_index=vidx)
+
+    assert [r.name for r in reports] == [
+        "baseline",
+        "+semantic",
+        "+value-link",
+        "+plan/sc",
+        "grounded",
+    ]
+    for r in reports:
+        assert r.execution_accuracy == 1.0 and r.per_tier == {"topn": 1.0}
+    by = {r.name: r for r in reports}
+    assert by["+plan/sc"].avg_llm_calls > by["baseline"].avg_llm_calls
+    assert by["grounded"].avg_llm_calls >= by["+plan/sc"].avg_llm_calls
