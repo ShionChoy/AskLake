@@ -177,7 +177,7 @@ _TOPN_PARAMS: list[tuple[str, str, str, str, str, int]] = [
     (
         "most_voted_1970s",
         "What are the {n} most-voted movies from the 1970s with at least 50,000 votes?",
-        "CAST(CAST(tb.startYear AS INT)/10 AS INT)*10 = 1970 AND tr.numVotes >= 50000",
+        "(tb.startYear // 10) * 10 = 1970 AND tr.numVotes >= 50000",
         "tr.numVotes",
         "tb.primaryTitle, tb.startYear, tr.numVotes",
         5,
@@ -185,7 +185,7 @@ _TOPN_PARAMS: list[tuple[str, str, str, str, str, int]] = [
     (
         "most_voted_1980s",
         "What are the {n} most-voted movies from the 1980s with at least 50,000 votes?",
-        "CAST(CAST(tb.startYear AS INT)/10 AS INT)*10 = 1980 AND tr.numVotes >= 50000",
+        "(tb.startYear // 10) * 10 = 1980 AND tr.numVotes >= 50000",
         "tr.numVotes",
         "tb.primaryTitle, tb.startYear, tr.numVotes",
         5,
@@ -193,7 +193,7 @@ _TOPN_PARAMS: list[tuple[str, str, str, str, str, int]] = [
     (
         "most_voted_1990s",
         "What are the {n} most-voted movies from the 1990s with at least 100,000 votes?",
-        "CAST(CAST(tb.startYear AS INT)/10 AS INT)*10 = 1990 AND tr.numVotes >= 100000",
+        "(tb.startYear // 10) * 10 = 1990 AND tr.numVotes >= 100000",
         "tr.numVotes",
         "tb.primaryTitle, tb.startYear, tr.numVotes",
         10,
@@ -201,7 +201,7 @@ _TOPN_PARAMS: list[tuple[str, str, str, str, str, int]] = [
     (
         "most_voted_2000s",
         "What are the {n} most-voted movies from the 2000s with at least 100,000 votes?",
-        "CAST(CAST(tb.startYear AS INT)/10 AS INT)*10 = 2000 AND tr.numVotes >= 100000",
+        "(tb.startYear // 10) * 10 = 2000 AND tr.numVotes >= 100000",
         "tr.numVotes",
         "tb.primaryTitle, tb.startYear, tr.numVotes",
         10,
@@ -209,7 +209,7 @@ _TOPN_PARAMS: list[tuple[str, str, str, str, str, int]] = [
     (
         "most_voted_2010s",
         "What are the {n} most-voted movies from the 2010s with at least 200,000 votes?",
-        "CAST(CAST(tb.startYear AS INT)/10 AS INT)*10 = 2010 AND tr.numVotes >= 200000",
+        "(tb.startYear // 10) * 10 = 2010 AND tr.numVotes >= 200000",
         "tr.numVotes",
         "tb.primaryTitle, tb.startYear, tr.numVotes",
         10,
@@ -296,7 +296,7 @@ _TOPN_PARAMS: list[tuple[str, str, str, str, str, int]] = [
     (
         "most_voted_1960s",
         "What are the {n} most-voted movies from the 1960s with at least 25,000 votes?",
-        "CAST(CAST(tb.startYear AS INT)/10 AS INT)*10 = 1960 AND tr.numVotes >= 25000",
+        "(tb.startYear // 10) * 10 = 1960 AND tr.numVotes >= 25000",
         "tr.numVotes",
         "tb.primaryTitle, tb.startYear, tr.numVotes",
         5,
@@ -304,7 +304,7 @@ _TOPN_PARAMS: list[tuple[str, str, str, str, str, int]] = [
     (
         "most_voted_1950s",
         "What are the {n} most-voted movies from the 1950s with at least 10,000 votes?",
-        "CAST(CAST(tb.startYear AS INT)/10 AS INT)*10 = 1950 AND tr.numVotes >= 10000",
+        "(tb.startYear // 10) * 10 = 1950 AND tr.numVotes >= 10000",
         "tr.numVotes",
         "tb.primaryTitle, tb.startYear, tr.numVotes",
         5,
@@ -449,7 +449,7 @@ def _movies_per_decade() -> EvalCase:
             " Group by decade and order chronologically."
         ),
         gold_sql=(
-            "SELECT CAST(CAST(startYear AS INT)/10 AS INT)*10 AS decade,"
+            "SELECT (startYear // 10) * 10 AS decade,"
             " COUNT(*) AS num_movies\n"
             "FROM title_basics\n"
             "WHERE startYear BETWEEN 1920 AND 2029\n"
@@ -469,7 +469,7 @@ def _avg_rating_per_decade_since(since: int) -> EvalCase:
             " along with the number of titles per decade?"
         ),
         gold_sql=(
-            "SELECT CAST(CAST(tb.startYear AS INT)/10 AS INT)*10 AS decade,\n"
+            "SELECT (tb.startYear // 10) * 10 AS decade,\n"
             "       AVG(tr.averageRating) AS avg_rating,\n"
             "       COUNT(*) AS num_titles\n"
             "FROM title_basics tb\n"
@@ -578,7 +578,7 @@ _AGGREGATION_CASES: list[EvalCase] = (
                 " Group by decade and order chronologically."
             ),
             gold_sql=(
-                "SELECT CAST(CAST(startYear AS INT)/10 AS INT)*10 AS decade,\n"
+                "SELECT (startYear // 10) * 10 AS decade,\n"
                 "       COUNT(*) AS num_movies\n"
                 "FROM title_basics\n"
                 "WHERE genres LIKE '%Horror%' AND startYear IS NOT NULL\n"
@@ -661,7 +661,7 @@ _AGGREGATION_CASES: list[EvalCase] = (
                 " in each decade? Group by decade and order chronologically."
             ),
             gold_sql=(
-                "SELECT CAST(CAST(startYear AS INT)/10 AS INT)*10 AS decade,\n"
+                "SELECT (startYear // 10) * 10 AS decade,\n"
                 "       COUNT(*) AS num_movies\n"
                 "FROM title_basics\n"
                 "WHERE runtimeMinutes > 120 AND startYear IS NOT NULL\n"
@@ -708,7 +708,7 @@ _AGGREGATION_CASES: list[EvalCase] = (
                 " Group by decade and order chronologically."
             ),
             gold_sql=(
-                "SELECT CAST(CAST(startYear AS INT)/10 AS INT)*10 AS decade,\n"
+                "SELECT (startYear // 10) * 10 AS decade,\n"
                 "       COUNT(*) AS num_movies\n"
                 "FROM title_basics\n"
                 "WHERE genres LIKE '%Drama%' AND startYear IS NOT NULL\n"

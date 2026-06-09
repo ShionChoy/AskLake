@@ -84,3 +84,12 @@ def test_aggregation_golds_have_no_gratuitous_round():
     assert offenders == [], (
         f"aggregation golds should return canonical (unrounded) aggregates: {offenders}"
     )
+
+
+def test_no_rounding_decade_binning():
+    """Decade binning must floor, not round (CAST(double AS INT) rounds in DuckDB, leaking
+    years across decade boundaries). Correct form is integer floor-division (// )."""
+    from eval.imdb_gold import IMDB_GOLD
+
+    offenders = [c.name for c in IMDB_GOLD if "/10 AS INT)*10" in c.gold_sql]
+    assert offenders == [], f"buggy rounding decade binning still present in: {offenders}"
