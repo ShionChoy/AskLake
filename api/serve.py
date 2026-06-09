@@ -300,7 +300,7 @@ def build_app(
         return {
             "provider": default_provider or "(client-supplied)",
             "model": default_model or "(set in the sidebar)",
-            "path": "semantic-grounded + self-correcting (agentic)",
+            "path": f"semantic-grounded + self-correcting ({agent_kind})",
         }
 
     @app.post("/ask_trace")

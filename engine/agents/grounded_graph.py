@@ -5,7 +5,7 @@ from collections.abc import Callable
 from langgraph.graph import END, START, StateGraph
 
 from engine.agents.agentic_graph import CORRECTION_SYSTEM, CORRECTION_TEMPLATE
-from engine.agents.critic import assess, select_consistent
+from engine.agents.critic import assess, is_ranking_question, select_consistent
 from engine.agents.graph import PROMPT_TEMPLATE, SYSTEM_PROMPT, extract_sql
 from engine.ports.agentgraph import GraphState
 from engine.ports.llm import LLMProvider
@@ -80,8 +80,6 @@ def build_grounded_sql_graph(
         }
 
     def classify(state: GroundedState) -> GroundedState:
-        from engine.agents.critic import is_ranking_question
-
         is_hard = is_ranking_question(state["question"]) or state.get("has_entity", False)
         return {"difficulty": "hard" if is_hard else "simple"}
 
