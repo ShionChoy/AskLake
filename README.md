@@ -117,33 +117,35 @@ A heuristic Router scores SQL-vs-graph features and dispatches to `SqlPath`, `Gr
 
 ## Evaluation
 
-A five-rung **ablation** — each rung adds one capability over the previous — run live with DeepSeek `deepseek-v4-flash`, strict multiset-exact execution accuracy with tie-safe gold, reported per difficulty tier with cost columns (`llm/q` = mean LLM calls per question, `ms/q` = mean wall-clock). Run on **two datasets with the same engine and zero engine changes** — only `datasets/<name>/` config differs.
+A five-rung **ablation** — each rung adds one capability over the previous — run live with DeepSeek `deepseek-v4-flash`, multiset execution accuracy (numeric cells compared with a relative tolerance; see *Scoring* below) on tie-safe gold, reported per difficulty tier with cost columns (`llm/q` = mean LLM calls per question, `ms/q` = mean wall-clock). Run on **two datasets with the same engine and zero engine changes** — only `datasets/<name>/` config differs.
 
 **IMDb** — 102-case stratified gold set on a ~243K-movie working set (`make build-imdb MIN_VOTES=25`):
 
 | system | valid-SQL | exec-acc | llm/q | ms/q | aggregation | top-N | multi-hop |
 |---|---|---|---|---|---|---|---|
-| baseline (raw, single-prompt) | 98%  | 38% | 1.0 | 5200 | 66% | 24% | 19% |
-| +semantic (grounded + self-correct) | 100% | **73%** | 1.0 | 5600 | 66% | 61% | 94% |
-| +value-link | 100% | 72% | 1.0 | 5600 | 66% | 64% | 87% |
-| +plan/self-consistency | 100% | 74% | 4.0 | 16900 | 66% | 67% | 90% |
-| grounded (+ critic) | 100% | 75% | 4.2 | 16100 | 66% | 67% | 94% |
+| baseline (raw, single-prompt) | 100% | 57% | 1.0 | 4800 | 92% | 24% | 48% |
+| +semantic (grounded + self-correct) | 100% | **84%** | 1.0 | 4900 | 92% | 67% | 94% |
+| +value-link | 100% | 79% | 1.0 | 5700 | 92% | 61% | 84% |
+| +plan/self-consistency | 100% | 83% | 4.0 | 16000 | 92% | 67% | 90% |
+| grounded (+ critic) | 100% | 83% | 4.2 | 17400 | 89% | 67% | 94% |
 
 **CRM** — a synthetic second dataset (`datasets/crm_demo/`, 11-case gold) the engine was **never tuned for, with no hand-authored few-shots**:
 
 | system | valid-SQL | exec-acc | llm/q | ms/q | aggregation | top-N | multi-hop |
 |---|---|---|---|---|---|---|---|
-| baseline (raw, single-prompt) | 100% | 55% | 1.0 | 3800 | 75% | 50% | 40% |
-| +semantic | 100% | 91% | 1.0 | 2300 | 100% | 50% | 100% |
-| +value-link | 100% | 82% | 1.0 | 2300 | 100% | 50% | 80% |
-| +plan/self-consistency | 100% | 82% | 1.8 | 5100 | 100% | 50% | 80% |
-| grounded (+ critic) | 100% | **100%** | 1.8 | 4300 | 100% | 100% | 100% |
+| baseline (raw, single-prompt) | 100% | 64% | 1.0 | 2700 | 75% | 50% | 60% |
+| +semantic | 100% | 82% | 1.0 | 2700 | 100% | 50% | 80% |
+| +value-link | 100% | **91%** | 1.0 | 2300 | 100% | 100% | 80% |
+| +plan/self-consistency | 100% | 73% | 1.8 | 4700 | 100% | 0% | 80% |
+| grounded (+ critic) | 100% | 82% | 1.8 | 4500 | 100% | 50% | 80% |
 
-**Grounding is the decisive lever on both datasets.** A semantic layer (curated descriptions, metrics, synonyms) lifts overall execution accuracy **38% → 73%** on IMDb and **55% → 91%** on CRM, concentrated on the hard tiers (IMDb multi-hop 19% → 94%, top-N 24% → 61%) and flat on aggregation (66% throughout — it needs no domain mapping). Self-correction in that step buys **executability** (valid-SQL 98% → 100%), not accuracy: the loop only retries on execution *errors*, never on a query that runs yet returns wrong rows.
+**Grounding is the decisive lever.** A semantic layer (curated descriptions, metrics, synonyms) lifts overall execution accuracy **57% → 84%** on IMDb and **64% → 82%** on CRM, concentrated entirely on the hard tiers (IMDb multi-hop 48% → 94%, top-N 24% → 67%) and flat on aggregation (92% throughout — it needs no domain mapping, so grounding can't and shouldn't move it). The cleanest read is `baseline → +semantic`: only the schema source changes, and accuracy jumps +27 points where the right column, join key, or filter is otherwise hallucinated from raw schema.
 
-**The heavier machinery earns its keep where there are no few-shots.** On hand-tuned IMDb, value-linking, planner decomposition, and self-consistency are roughly accuracy-neutral over the semantic layer (73% → 75%) while costing **4× the LLM calls and ~3× the latency** — the curated few-shots already carry it. But on **CRM, which has no few-shots**, the full grounded path is what reaches **100%** (vs 91% for the semantic layer alone): the reflexion critic closes the top-N tier 50% → 100%. That is the generalization payoff — the mechanisms that look redundant on a tuned dataset are exactly what get the last mile on a brand-new one, with the cost made explicit so the trade-off is visible.
+**The heavier machinery is roughly accuracy-neutral on clean data, at real cost.** On IMDb, value-linking, planner decomposition, and self-consistency don't move overall accuracy over the semantic layer (84% → 79% → 83% → 83%, all within run-to-run noise) while costing **4× the LLM calls and ~3.5× the latency**. The curated few-shots already carry hand-tuned IMDb. Their intended payoff is **messy, un-tuned data with no few-shots** — value-linking (resolving free-text to real stored values) and the self-consistency/critic safety net should matter more there than on clean synthetic values; the CRM run is a sanity check that the same engine generalizes (baseline 64% → grounded-family ~82–91%), not a fine-grained ranking.
 
-Caveats (honest): CRM n=11 is small, so the intermediate rungs are noisy (the robust signal is baseline ≪ grounded); both are single live runs; K candidates are generated sequentially in this version (the `ms/q` columns reflect that — parallel fan-out is a latency follow-up that does not change accuracy).
+**Scoring & data integrity (honest).** Execution accuracy compares result sets as order-insensitive multisets, with one refinement: **numeric cells use a relative tolerance (`rel_tol=1e-3`); whole numbers (counts, years) and all non-numeric cells compare exactly**, so a correct aggregate scored at a different precision matches, while off-by-one counts, wrong labels, or wrong cardinality never do. This was added after a per-case audit of the aggregation tier (which had been suspiciously pinned at ~66% and unresponsive to grounding) surfaced **two gold-set bugs**, both since fixed: (1) 9 gold queries wrapped aggregates in `ROUND(AVG(...), 2)`, penalizing correct unrounded answers; (2) 12 queries (5 aggregation + 7 top-N filters) computed decades with `CAST(CAST(year AS INT)/10 AS INT)*10`, which *rounds* in DuckDB and leaked years across decade boundaries (`1929 → 1930`) — corrected to floor-division `(year // 10) * 10`. These were benchmark-correctness fixes that raised **every** rung roughly equally, so the relative story above is unchanged; aggregation rose to its rightful ~92%. Residual aggregation misses are now *genuine* model errors (e.g. the model writing `(year/10)*10`, which DuckDB true-division collapses back to the year).
+
+Caveats: CRM n=11 is small, so its per-rung numbers swing run-to-run (top-N is 2 cases — pure noise); both are single live runs; K candidates are generated sequentially (the `ms/q` columns reflect that — parallel fan-out is a latency follow-up that does not change accuracy).
 
 Reproduce: `make build-imdb MIN_VOTES=25 && make eval-real` (IMDb) and `make build-crm && make eval-real-crm` (CRM) — both need an API key; IMDb also needs the raw TSVs. A hermetic illustrative run (no key, no data) is available with `make eval`.
 
