@@ -26,9 +26,12 @@ from engine.ports.llm import LLMProvider
 from engine.ports.storage import QueryResult, StorageBackend
 from engine.retrieval.agentic_sql_path import AgenticSqlPath
 from engine.retrieval.graph_rag_path import GraphRagPath
+from engine.retrieval.grounded_sql_path import GroundedSqlPath
 from engine.retrieval.router import Router
 from engine.retrieval.synthesizer import Synthesizer
 from engine.semantic.semantic_layer import SemanticLayerProvider
+from engine.semantic.semantic_model import load_semantic_layer
+from engine.semantic.value_index import build_value_index
 
 PARQUET_DIR = os.environ.get("ASKLAKE_PARQUET_DIR", "data/imdb/parquet")
 SEMANTIC_YAML = "datasets/imdb_cmu/semantic.yaml"
@@ -199,8 +202,21 @@ def build_app(
     tbackend = _TracingBackend(backend, log)
     tschema = _TracingSchema(SemanticLayerProvider.from_yaml(SEMANTIC_YAML), log)
 
-    def _make_path(provider_llm: LLMProvider) -> AgenticSqlPath:
-        return AgenticSqlPath(_TracingLLM(provider_llm, log), tschema, tbackend, max_retries=2)
+    agent_kind = os.environ.get("ASKLAKE_AGENT", "grounded").lower()
+    value_index = None
+    if agent_kind == "grounded":
+        try:
+            value_index = build_value_index(load_semantic_layer(SEMANTIC_YAML), backend)
+        except Exception as exc:  # noqa: BLE001 - degrade to no value hints
+            print(f"[api.serve] value index unavailable ({exc}); continuing without value-linking")
+
+    def _make_path(provider_llm: LLMProvider):
+        tllm = _TracingLLM(provider_llm, log)
+        if agent_kind == "grounded":
+            return GroundedSqlPath(
+                tllm, tschema, tbackend, value_index=value_index, k_candidates=3, max_retries=2
+            )
+        return AgenticSqlPath(tllm, tschema, tbackend, max_retries=2)
 
     def _model_of(provider_llm: LLMProvider) -> str:
         return getattr(provider_llm, "_model", None) or type(provider_llm).__name__
@@ -213,6 +229,7 @@ def build_app(
     app.state.trace_log = log
     app.state.model_name = default_model
     app.state.provider_name = default_provider
+    app.state.sql_path_kind = agent_kind
 
     # Optional knowledge graph: use an injected store (tests) or load the persisted triples.
     if graph_store is None and Path(GRAPH_PATH).exists():

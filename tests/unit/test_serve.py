@@ -223,3 +223,15 @@ def test_ask_trace_sql_only_has_no_graph_triples():
     out = c.post("/ask_trace", json={"question": "common themes", "path": "sql"}).json()
     assert out["path"] == "sql"
     assert out.get("graph_triples") is None
+
+
+def test_serve_uses_grounded_path_by_default(monkeypatch):
+    monkeypatch.delenv("ASKLAKE_AGENT", raising=False)
+    import api.serve as serve
+    from engine.lakehouse.duckdb_backend import DuckDBBackend
+    from engine.llm.fake import FakeLLMProvider
+
+    backend = DuckDBBackend()
+    backend.setup("CREATE TABLE title_basics AS SELECT 1 AS tconst;")
+    app = serve.build_app(llm=FakeLLMProvider(responses=["SELECT 1"]), backend=backend)
+    assert app.state.sql_path_kind == "grounded"
