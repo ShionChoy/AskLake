@@ -37,3 +37,21 @@ def test_load_empty_file(tmp_path):
     p.write_text("")
     layer = load_semantic_layer(p)
     assert layer.tables == () and layer.synonyms == {}
+
+
+def test_column_def_link_annotation_loads(tmp_path):
+    from engine.semantic.semantic_model import load_semantic_layer
+
+    yaml_text = """
+tables:
+  - name: t
+    columns:
+      - {name: genres, link: categorical}
+      - {name: primaryName, link: entity}
+      - {name: tconst}
+"""
+    p = tmp_path / "s.yaml"
+    p.write_text(yaml_text)
+    layer = load_semantic_layer(p)
+    cols = {c.name: c.link for c in layer.tables[0].columns}
+    assert cols == {"genres": "categorical", "primaryName": "entity", "tconst": ""}

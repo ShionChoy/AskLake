@@ -11,6 +11,7 @@ class ColumnDef:
     name: str
     description: str = ""
     type: str = ""
+    link: str = ""  # "" | "categorical" | "entity" | "auto" — drives value-linking
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,12 @@ def load_semantic_layer(path: str | Path) -> SemanticLayer:
             name=t["name"],
             description=t.get("description", ""),
             columns=tuple(
-                ColumnDef(c["name"], c.get("description", ""), c.get("type", ""))
+                ColumnDef(
+                    c["name"],
+                    c.get("description", ""),
+                    c.get("type", ""),
+                    c.get("link", ""),
+                )
                 for c in t.get("columns", [])
             ),
         )
