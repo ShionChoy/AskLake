@@ -6,6 +6,24 @@ def _qr(rows):
     return QueryResult(columns=["title", "r"], rows=rows)
 
 
+def test_is_ranking_question_predicate():
+    from engine.agents.critic import is_ranking_question
+
+    assert is_ranking_question("top 5 movies") is True
+    assert is_ranking_question("highest rated film") is True
+    assert is_ranking_question("the first name of the director") is False
+
+
+def test_assess_does_not_flag_first_last_non_ranking():
+    c = assess(
+        "what is the first name of the director",
+        "SELECT firstName FROM names",
+        _qr([("Chris", 1)]),
+        difficulty="simple",
+    )
+    assert c.ok is True
+
+
 def test_assess_accepts_good_topn_result():
     c = assess(
         "top 5 highest rated movies",

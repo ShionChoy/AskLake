@@ -47,8 +47,8 @@ def test_grounded_graph_happy_path_single_candidate():
     assert state["sql"].upper().startswith("SELECT")
     assert state["result"].rows[0][0] == "A"
     assert not state.get("error")
-    # value hint reached the writer prompt
-    assert "genres LIKE '%Sci-Fi%'" in llm.prompts[-1] or "genres LIKE '%Sci-Fi%'" in llm.prompts[0]
+    # value hint reached the writer prompt (the last LLM call)
+    assert "genres LIKE '%Sci-Fi%'" in llm.prompts[-1]
 
 
 def test_grounded_graph_critic_triggers_correction_on_missing_limit():

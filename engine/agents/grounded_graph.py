@@ -80,9 +80,9 @@ def build_grounded_sql_graph(
         }
 
     def classify(state: GroundedState) -> GroundedState:
-        from engine.agents.critic import _TOPN
+        from engine.agents.critic import is_ranking_question
 
-        is_hard = bool(_TOPN.search(state["question"].lower())) or state.get("has_entity", False)
+        is_hard = is_ranking_question(state["question"]) or state.get("has_entity", False)
         return {"difficulty": "hard" if is_hard else "simple"}
 
     def plan(state: GroundedState) -> GroundedState:

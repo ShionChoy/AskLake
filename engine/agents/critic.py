@@ -5,13 +5,18 @@ from dataclasses import dataclass
 
 from engine.ports.storage import QueryResult
 
-_TOPN = re.compile(r"\b(top|highest|lowest|most|least|best|worst|first|last)\b")
+_TOPN = re.compile(r"\b(top|highest|lowest|most|least|best|worst)\b")
 
 
 @dataclass(frozen=True)
 class Critique:
     ok: bool
     reasons: tuple[str, ...]
+
+
+def is_ranking_question(question: str) -> bool:
+    """True when the question asks for a ranking/superlative (top-N) answer."""
+    return bool(_TOPN.search(question.lower()))
 
 
 def assess(question: str, sql: str, result: QueryResult | None, *, difficulty: str) -> Critique:
@@ -21,7 +26,7 @@ def assess(question: str, sql: str, result: QueryResult | None, *, difficulty: s
     reasons: list[str] = []
     if not result.rows:
         reasons.append("query returned 0 rows")
-    if _TOPN.search(question.lower()):
+    if is_ranking_question(question):
         su = sql.upper()
         if "ORDER BY" not in su:
             reasons.append("top-N/superlative question but SQL has no ORDER BY")

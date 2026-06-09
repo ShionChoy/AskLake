@@ -51,3 +51,17 @@ def test_no_spurious_hint_when_nothing_matches():
 
 def test_empty_index_links_nothing_gracefully():
     assert ValueIndex().link("anything") == []
+
+
+def test_format_hints_escapes_single_quotes_in_entity_value():
+    from engine.semantic.value_index import ValueHint, format_hints
+
+    out = format_hints([ValueHint(column="lead", table="films", value="O'Brien", mode="entity")])
+    assert out == "- lead = 'O''Brien'"
+
+
+def test_short_categorical_value_does_not_emit_spurious_hint():
+    from engine.semantic.value_index import ValueIndex
+
+    idx = ValueIndex(categorical={"code": ("t", frozenset({"1"}))})
+    assert idx.link("top 1 movie") == []

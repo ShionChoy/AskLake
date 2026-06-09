@@ -42,7 +42,7 @@ class ValueIndex:
         for col, (table, values) in self.categorical.items():
             for v in values:
                 vtok = _tokens(v)
-                if vtok and vtok <= qtok:
+                if len(v) >= 2 and vtok and vtok <= qtok:
                     hints.append(ValueHint(col, table, v, "categorical"))
         if self.entity_columns and self.backend is not None:
             spans = [s.strip() for s in _CAP_SPAN.findall(question) if _tokens(s)]
@@ -113,8 +113,9 @@ def format_hints(hints: list[ValueHint]) -> str:
     """Render hints as a context block of concrete predicates for the SQL writer."""
     lines: list[str] = []
     for h in hints:
+        safe = h.value.replace("'", "''")
         if h.mode == "categorical":
-            lines.append(f"- {h.column} LIKE '%{h.value}%'")
+            lines.append(f"- {h.column} LIKE '%{safe}%'")
         else:
-            lines.append(f"- {h.column} = '{h.value}'")
+            lines.append(f"- {h.column} = '{safe}'")
     return "\n".join(lines)

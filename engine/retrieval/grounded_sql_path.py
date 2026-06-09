@@ -18,7 +18,7 @@ class GroundedSqlPath:
     self-consistency, and a reflexion critic. The injected executor wraps governance +
     StorageBackend so the graph stays storage-agnostic."""
 
-    name = "sql"
+    name = "sql"  # same logical path name as AgenticSqlPath; only one is active at a time
 
     def __init__(
         self,
