@@ -25,6 +25,8 @@ class SystemReport:
     execution_accuracy: float
     avg_attempts: float
     per_tier: dict[str, float] | None = None  # exec-acc per tier (None when no tiers present)
+    avg_llm_calls: float = 0.0  # mean LLM .complete() calls per case (cost signal)
+    avg_wall_ms: float = 0.0  # mean wall-clock ms per case (latency signal)
 
 
 def _rows_match(a, b) -> bool:
