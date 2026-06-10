@@ -235,3 +235,22 @@ def test_serve_uses_grounded_path_by_default(monkeypatch):
     backend.setup("CREATE TABLE title_basics AS SELECT 1 AS tconst;")
     app = serve.build_app(llm=FakeLLMProvider(responses=["SELECT 1"]), backend=backend)
     assert app.state.sql_path_kind == "grounded"
+
+
+def test_serve_passes_ontology_attribute_relations_to_graph_path(monkeypatch):
+    import api.serve as serve
+    from engine.graph.ontology import load_ontology
+
+    captured: dict = {}
+    real = serve.GraphRagPath
+
+    def spy(store, **kwargs):
+        captured.update(kwargs)
+        return real(store, **kwargs)
+
+    monkeypatch.setattr("api.serve.GraphRagPath", spy)
+    serve.build_app(backend=DuckDBBackend(), graph_store=_graph_store())
+
+    expected = frozenset(load_ontology("datasets/imdb_cmu/graph/ontology.yaml").attribute_relations)
+    assert captured.get("attribute_relations") == expected
+    assert "HAS_GENRE" in captured["attribute_relations"]

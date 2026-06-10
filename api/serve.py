@@ -19,6 +19,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from api.main import create_app
+from engine.graph.ontology import load_ontology
 from engine.graph.persistence import load_store
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 from engine.llm.factory import make_provider
@@ -36,6 +37,7 @@ from engine.semantic.value_index import build_value_index
 PARQUET_DIR = os.environ.get("ASKLAKE_PARQUET_DIR", "data/imdb/parquet")
 SEMANTIC_YAML = "datasets/imdb_cmu/semantic.yaml"
 GRAPH_PATH = os.environ.get("ASKLAKE_GRAPH_PATH", "data/imdb/graph/triples.jsonl")
+ONTOLOGY_YAML = "datasets/imdb_cmu/graph/ontology.yaml"
 
 
 def apply_duckdb_guardrails(
@@ -238,8 +240,15 @@ def build_app(
         except Exception as exc:  # noqa: BLE001
             print(f"[api.serve] failed to load graph at {GRAPH_PATH} ({exc}); graph disabled")
             graph_store = None
+    graph_attr_relations: frozenset[str] = frozenset()
+    try:
+        graph_attr_relations = frozenset(load_ontology(ONTOLOGY_YAML).attribute_relations)
+    except Exception as exc:  # noqa: BLE001 - degrade to no exclusion
+        print(f"[api.serve] ontology unavailable ({exc}); seeding without attribute exclusion")
     graph_path = (
-        _TracingGraphPath(GraphRagPath(graph_store), log) if graph_store is not None else None
+        _TracingGraphPath(GraphRagPath(graph_store, attribute_relations=graph_attr_relations), log)
+        if graph_store is not None
+        else None
     )
     synth = Synthesizer()
     # router.route() only scores the question — it never calls sql_path.run — so passing
