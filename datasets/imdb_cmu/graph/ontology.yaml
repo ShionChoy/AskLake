@@ -3,6 +3,7 @@
 # entity-alignment crosswalk in the dataset connector (see docs/dataset.md).
 entity_types: [Film, Person, Theme, Character, Place, Genre, Language, Country, Year, Actor]
 relation_types: [HAS_THEME, DIRECTED_BY, FEATURES_CHARACTER, SET_IN, HAS_GENRE, IN_LANGUAGE, FROM_COUNTRY, RELEASED_IN, PLAYED_BY, ACTED_IN]
+attribute_relations: [HAS_GENRE, IN_LANGUAGE, FROM_COUNTRY, RELEASED_IN, HAS_THEME]
 hint: >
   Use the film's title as the subject for film-level facts. Emit DIRECTED_BY -> director
   (a person), HAS_THEME -> a short theme phrase (e.g. "memory", "identity", "time"),
