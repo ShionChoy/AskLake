@@ -22,6 +22,12 @@ AskLake answers plain-English questions through two grounded retrieval paths —
 
 ---
 
+### Data scale
+
+The app and knowledge graph run on real data well beyond a toy slice: an IMDb working set of **~514K titles** (movies + TV series + TV movies; `make build-imdb-full`) and a CMU-derived knowledge graph of **915,291 triples across ~42,800 films and ~229,500 entities** (`make build-graph`). The graph is mostly a zero-cost deterministic backbone — genres, languages, countries, cast & characters from CMU metadata, plus **47,746 authoritative `DIRECTED_BY` edges from IMDb** (~884K triples total) — layered with ~31K LLM-extracted plot-theme and setting triples over the 2,000 most-popular aligned films. The evaluation benchmark deliberately stays on a controlled ~243K-movie slice (see *Evaluation*).
+
+---
+
 ## Quickstart
 
 ### 1. Install
