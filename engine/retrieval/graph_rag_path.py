@@ -50,16 +50,27 @@ class GraphRagPath:
 
     name = "graph"
 
-    def __init__(self, store: GraphStore, max_hops: int = 2):
+    def __init__(
+        self,
+        store: GraphStore,
+        max_hops: int = 2,
+        *,
+        attribute_relations: frozenset[str] = frozenset(),
+        top_k_seeds: int = 10,
+    ):
         self._store = store
-        self._retriever = GraphRetriever(store, max_hops=max_hops)
+        self._retriever = GraphRetriever(
+            store,
+            max_hops=max_hops,
+            attribute_relations=attribute_relations,
+            top_k_seeds=top_k_seeds,
+        )
 
     def can_handle(self, question: str) -> bool:
         w = _words(question)
         if w & _GRAPH_HINTS:
             return True
-        # also handle a question that names a known entity
-        return any(_words(e) and _words(e) <= w for e in self._store.entities())
+        return bool(self._retriever.seeds(question))  # fast: inverted index, no full scan
 
     def run(self, question: str) -> RetrievalResult:
         sg = self._retriever.retrieve(question)

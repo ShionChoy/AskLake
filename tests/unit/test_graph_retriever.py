@@ -66,3 +66,34 @@ def test_hub_node_is_not_expanded():
     ctx = r.retrieve("drama")  # seeds the degree-500 "Drama" hub
     assert len(ctx.triples) <= 50  # per-node fan-out cap: only 50 of 500 edges
     assert all(t.obj != "revenge" for t in ctx.triples)  # hub not expanded -> no 2nd hop
+
+
+def _attr_store() -> InMemoryGraphStore:
+    g = InMemoryGraphStore()
+    g.add(Triple("Drama Queen", "HAS_GENRE", "Drama", "s1"))  # film whose TITLE contains "drama"
+    g.add(Triple("Inception", "HAS_GENRE", "Drama", "s2"))
+    g.add(Triple("Inception", "DIRECTED_BY", "Christopher Nolan", "s3"))
+    return g
+
+
+def test_attribute_objects_are_not_seeds():
+    # "Drama" is the object of HAS_GENRE -> excluded from seeds; the film "Drama Queen" still seeds
+    r = GraphRetriever(_attr_store(), attribute_relations=frozenset({"HAS_GENRE"}))
+    assert r.seeds("a drama queen film") == ["Drama Queen"]
+    assert "Drama" not in r.seeds("drama")  # bare attribute value never seeds
+
+
+def test_seeds_capped_and_ranked_by_specificity():
+    g = InMemoryGraphStore()
+    g.add(Triple("Batman", "HAS_THEME", "x", "s"))
+    g.add(Triple("Batman Begins", "HAS_THEME", "y", "s"))
+    # both match "the batman begins story"; the more specific (more tokens) ranks first
+    r = GraphRetriever(g, top_k_seeds=1)
+    assert r.seeds("the batman begins story") == ["Batman Begins"]
+
+
+def test_seeds_default_matches_legacy_behavior():
+    # with no attribute_relations, seeds == the old etok<=qtok match set
+    g = _store()
+    assert GraphRetriever(g).seeds("themes in Inception") == ["Inception"]
+    assert GraphRetriever(g).seeds("how many films are there") == []
