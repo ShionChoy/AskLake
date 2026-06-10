@@ -97,3 +97,40 @@ def test_seeds_default_matches_legacy_behavior():
     g = _store()
     assert GraphRetriever(g).seeds("themes in Inception") == ["Inception"]
     assert GraphRetriever(g).seeds("how many films are there") == []
+
+
+def test_subset_title_seeds_are_dropped():
+    g = InMemoryGraphStore()
+    g.add(Triple("The Dark Knight", "HAS_THEME", "fear", "s"))
+    g.add(Triple("The Dark", "HAS_THEME", "night", "s"))
+    g.add(Triple("Dark", "HAS_THEME", "x", "s"))
+    # all three are token-subsets of the query, but only the maximal match survives
+    assert GraphRetriever(g).seeds("the dark knight") == ["The Dark Knight"]
+
+
+def test_distinct_titles_both_seed():
+    g = InMemoryGraphStore()
+    g.add(Triple("Inception", "HAS_THEME", "dreams", "s"))
+    g.add(Triple("The Dark Knight", "HAS_THEME", "fear", "s"))
+    # neither title's tokens are a subset of the other's -> both seed
+    assert set(GraphRetriever(g).seeds("inception and the dark knight")) == {
+        "Inception",
+        "The Dark Knight",
+    }
+
+
+def test_attribute_nodes_are_traversal_leaves():
+    g = InMemoryGraphStore()
+    g.add(Triple("The Dark Knight", "IN_LANGUAGE", "English Language", "s0"))
+    g.add(Triple("The Dark Knight", "HAS_THEME", "fear", "s0"))
+    for i in range(100):  # English Language is a hub pointing at 100 OTHER films
+        g.add(Triple(f"Other Film {i}", "IN_LANGUAGE", "English Language", f"s{i}"))
+    r = GraphRetriever(g, attribute_relations=frozenset({"IN_LANGUAGE"}))
+    sg = r.retrieve("the dark knight")
+    objs = {t.obj for t in sg.triples}
+    subs = {t.subject for t in sg.triples}
+    assert "English Language" in objs  # the film's leaf fact is kept
+    assert "fear" in objs  # the film's own facts are kept
+    # the attribute hub must NOT fan out into the 100 unrelated films
+    assert not any(s.startswith("Other Film") for s in subs)
+    assert not any(o.startswith("Other Film") for o in objs)

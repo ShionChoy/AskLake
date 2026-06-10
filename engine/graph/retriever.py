@@ -61,9 +61,16 @@ class LexicalSeedProvider:
         for tok in qtok:  # union of posting lists of the question's tokens
             candidates |= self._index.get(tok, set())
         matched = [e for e in candidates if self._entity_tokens[e] <= qtok]
+        # keep only maximal matches: drop a candidate whose tokens are a strict subset of
+        # another candidate's (so "The Dark"/"Dark" drop out when "The Dark Knight" matches)
+        maximal = [
+            e
+            for e in matched
+            if not any(self._entity_tokens[e] < self._entity_tokens[other] for other in matched)
+        ]
         # specificity: more tokens first, then longer name (deterministic tiebreak)
-        matched.sort(key=lambda e: (len(self._entity_tokens[e]), len(e), e), reverse=True)
-        return matched[: self._top_k]
+        maximal.sort(key=lambda e: (len(self._entity_tokens[e]), len(e), e), reverse=True)
+        return maximal[: self._top_k]
 
 
 class GraphRetriever:
@@ -88,6 +95,9 @@ class GraphRetriever:
         self._max_triples = max_triples
         self._max_neighbors_per_node = max_neighbors_per_node
         self._max_degree = max_degree
+        self._attribute_nodes = frozenset(
+            t.obj for t in store.triples() if t.relation in attribute_relations
+        )
         self._seed_provider = seed_provider or LexicalSeedProvider(
             store, attribute_relations=attribute_relations, top_k=top_k_seeds
         )
@@ -119,7 +129,7 @@ class GraphRetriever:
                             break
                     if expandable:
                         for other in (t.subject, t.obj):
-                            if other not in seen_entities:
+                            if other not in seen_entities and other not in self._attribute_nodes:
                                 seen_entities.add(other)
                                 next_frontier.append(other)
             frontier = next_frontier
