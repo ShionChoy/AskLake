@@ -1,4 +1,6 @@
-.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6 eval eval-real build-imdb build-graph build-crm eval-real-crm serve ui clean
+.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6 eval eval-real build-imdb build-imdb-full build-graph build-crm eval-real-crm serve ui clean
+
+PARQUET_DIR_APP := $(if $(wildcard data/imdb/parquet_full),data/imdb/parquet_full,data/imdb/parquet)
 
 dev:
 	docker compose --profile core up
@@ -21,8 +23,11 @@ demo-p1:
 build-imdb:
 	uv run python -c "import os; from datasets.imdb_cmu.source import build_parquet; build_parquet(os.environ.get('IMDB_RAW','data/imdb/raw'), os.environ.get('PARQUET_DIR','data/imdb/parquet'), int(os.environ.get('MIN_VOTES','1000')))"
 
+build-imdb-full:
+	uv run python -c "from datasets.imdb_cmu.source import build_parquet; build_parquet('data/imdb/raw','data/imdb/parquet_full', 0, ('movie','tvSeries','tvMovie'))"
+
 build-graph:
-	uv run python -m scripts.build_graph
+	ASKLAKE_PARQUET_DIR=$(PARQUET_DIR_APP) GRAPH_FILMS=$(or $(GRAPH_FILMS),2000) uv run python -m scripts.build_graph
 
 demo-p2:
 	uv run python demos/demo_p2.py
@@ -52,10 +57,10 @@ eval-real-crm:
 	uv run python -m eval.real_run --dataset crm
 
 serve:
-	uv run uvicorn api.serve:build_app --factory $(if $(wildcard .env),--env-file .env,) --host 0.0.0.0 --port 8000
+	ASKLAKE_PARQUET_DIR=$(PARQUET_DIR_APP) uv run uvicorn api.serve:build_app --factory $(if $(wildcard .env),--env-file .env,) --host 0.0.0.0 --port 8000
 
 ui:
-	uv run streamlit run ui/app.py --server.headless true --server.port 8501 --server.address 0.0.0.0 --browser.gatherUsageStats false
+	ASKLAKE_PARQUET_DIR=$(PARQUET_DIR_APP) uv run streamlit run ui/app.py --server.headless true --server.port 8501 --server.address 0.0.0.0 --browser.gatherUsageStats false
 
 clean:
 	find . -path ./.venv -prune -o -type d -name __pycache__ -print0 | xargs -0 rm -rf

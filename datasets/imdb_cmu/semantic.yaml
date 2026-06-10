@@ -1,10 +1,10 @@
 # IMDb semantic layer (per-dataset config; the engine reads this, hardcodes nothing).
 tables:
   - name: title_basics
-    description: One row per title; the working set is filtered to movies.
+    description: "One row per title; the working set covers movies, TV series, and TV movies (see titleType)."
     columns:
       - {name: tconst, description: Title id; joins to title_ratings and title_crew.}
-      - {name: titleType, description: Kind of title, e.g. movie, short, tvSeries.}
+      - {name: titleType, link: categorical, description: "Kind of title: 'movie', 'tvSeries', or 'tvMovie'. Filter titleType='movie' for films."}
       - {name: primaryTitle, description: The film's display title.}
       - {name: startYear, type: INTEGER, description: Release year.}
       - {name: genres, description: Comma-separated genres, e.g. "Sci-Fi,Drama"., link: categorical}
@@ -53,6 +53,8 @@ synonyms:
   acted in: title_principals
   cast: title_principals
   actor: title_principals
+  tv series: tvSeries
+  series: tvSeries
 few_shots:
   - question: Highest-rated sci-fi films after 2010
     sql: |
@@ -76,5 +78,12 @@ few_shots:
       JOIN title_ratings r USING (tconst)
       WHERE n.primaryName = 'Keanu Reeves'
         AND p.category IN ('actor', 'actress')
+      ORDER BY r.averageRating DESC
+      LIMIT 10
+  - question: Highest-rated TV series with at least 50000 votes
+    sql: |
+      SELECT b.primaryTitle, r.averageRating
+      FROM title_basics b JOIN title_ratings r USING (tconst)
+      WHERE b.titleType = 'tvSeries' AND r.numVotes >= 50000
       ORDER BY r.averageRating DESC
       LIMIT 10

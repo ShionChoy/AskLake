@@ -32,3 +32,10 @@ def test_imdb_semantic_has_link_annotations():
     assert links.get("genres") == "categorical"
     assert links.get("category") == "categorical"
     assert links.get("primaryName") == "entity"
+
+
+def test_imdb_semantic_documents_title_type():
+    layer = load_semantic_layer(_SEMANTIC)
+    cols = {c.name for t in layer.tables for c in t.columns}
+    assert "titleType" in cols
+    assert layer.synonyms.get("tv series") == "tvSeries"
