@@ -13,7 +13,9 @@ from pathlib import Path
 import duckdb
 
 
-def build_parquet(raw_dir: str, out_dir: str, min_votes: int = 1000) -> list[str]:
+def build_parquet(
+    raw_dir: str, out_dir: str, min_votes: int = 1000, title_types: tuple[str, ...] = ("movie",)
+) -> list[str]:
     raw = Path(raw_dir)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -27,6 +29,19 @@ def build_parquet(raw_dir: str, out_dir: str, min_votes: int = 1000) -> list[str
             con.execute(_pragma)
         except Exception:  # noqa: BLE001
             pass
+
+    _ALLOWED_TYPES = {
+        "movie",
+        "tvSeries",
+        "tvMovie",
+        "tvMiniSeries",
+        "short",
+        "video",
+        "tvEpisode",
+        "videoGame",
+    }
+    types = tuple(t for t in title_types if t in _ALLOWED_TYPES) or ("movie",)
+    types_sql = ", ".join(f"'{t}'" for t in types)
 
     def csv(name: str) -> str:
         path = (raw / name).as_posix()
@@ -52,7 +67,7 @@ def build_parquet(raw_dir: str, out_dir: str, min_votes: int = 1000) -> list[str
                TRY_CAST(runtimeMinutes AS INTEGER) AS runtimeMinutes,
                genres
         FROM {csv("title.basics.tsv.gz")}
-        WHERE titleType = 'movie'
+        WHERE titleType IN ({types_sql})
         """
     )
     con.execute(
