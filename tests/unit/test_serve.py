@@ -254,3 +254,22 @@ def test_serve_passes_ontology_attribute_relations_to_graph_path(monkeypatch):
     expected = frozenset(load_ontology("datasets/imdb_cmu/graph/ontology.yaml").attribute_relations)
     assert captured.get("attribute_relations") == expected
     assert "HAS_GENRE" in captured["attribute_relations"]
+
+
+def test_serve_passes_ontology_empty_hint_to_graph_path(monkeypatch):
+    import api.serve as serve
+    from engine.graph.ontology import load_ontology
+
+    captured: dict = {}
+    real = serve.GraphRagPath
+
+    def spy(store, **kwargs):
+        captured.update(kwargs)
+        return real(store, **kwargs)
+
+    monkeypatch.setattr("api.serve.GraphRagPath", spy)
+    serve.build_app(backend=DuckDBBackend(), graph_store=_graph_store())
+
+    expected = load_ontology("datasets/imdb_cmu/graph/ontology.yaml").empty_graph_hint
+    assert captured.get("empty_hint") == expected
+    assert captured["empty_hint"]  # non-empty

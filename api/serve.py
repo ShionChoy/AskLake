@@ -241,12 +241,23 @@ def build_app(
             print(f"[api.serve] failed to load graph at {GRAPH_PATH} ({exc}); graph disabled")
             graph_store = None
     graph_attr_relations: frozenset[str] = frozenset()
+    graph_empty_hint = "No matching facts found in the knowledge graph."
     try:
-        graph_attr_relations = frozenset(load_ontology(ONTOLOGY_YAML).attribute_relations)
-    except Exception as exc:  # noqa: BLE001 - degrade to no exclusion
+        _ontology = load_ontology(ONTOLOGY_YAML)
+        graph_attr_relations = frozenset(_ontology.attribute_relations)
+        if _ontology.empty_graph_hint:
+            graph_empty_hint = _ontology.empty_graph_hint
+    except Exception as exc:  # noqa: BLE001 - degrade to defaults
         print(f"[api.serve] ontology unavailable ({exc}); seeding without attribute exclusion")
     graph_path = (
-        _TracingGraphPath(GraphRagPath(graph_store, attribute_relations=graph_attr_relations), log)
+        _TracingGraphPath(
+            GraphRagPath(
+                graph_store,
+                attribute_relations=graph_attr_relations,
+                empty_hint=graph_empty_hint,
+            ),
+            log,
+        )
         if graph_store is not None
         else None
     )

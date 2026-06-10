@@ -27,3 +27,19 @@ def test_imdb_ontology_declares_attribute_relations():
         "RELEASED_IN",
         "HAS_THEME",
     }
+
+
+def test_empty_graph_hint_default_empty():
+    assert GraphOntology().empty_graph_hint == ""
+
+
+def test_load_ontology_reads_empty_graph_hint(tmp_path):
+    p = tmp_path / "ontology.yaml"
+    p.write_text("relation_types: [X]\nempty_graph_hint: not in the graph; try SQL\n")
+    assert load_ontology(p).empty_graph_hint == "not in the graph; try SQL"
+
+
+def test_imdb_ontology_has_empty_graph_hint():
+    ont = load_ontology("datasets/imdb_cmu/graph/ontology.yaml")
+    assert ont.empty_graph_hint
+    assert "knowledge graph" in ont.empty_graph_hint.lower()

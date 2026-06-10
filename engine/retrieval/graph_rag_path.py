@@ -36,10 +36,14 @@ def _words(text: str) -> set[str]:
 
 
 def _narrative(
-    seeds: tuple[str, ...], triples: tuple[Triple, ...], total: int, max_rows: int
+    seeds: tuple[str, ...],
+    triples: tuple[Triple, ...],
+    total: int,
+    max_rows: int,
+    empty_hint: str,
 ) -> str:
     if not triples:
-        return "No matching facts found in the knowledge graph."
+        return empty_hint
     seed_str = ", ".join(seeds) if seeds else "the question"
     lines = [f"{t.subject} {t.relation} {t.obj} [{t.source}]" for t in triples]
     body = f"From the knowledge graph, starting at {seed_str}:\n" + "\n".join(lines)
@@ -63,9 +67,11 @@ class GraphRagPath:
         attribute_relations: frozenset[str] = frozenset(),
         top_k_seeds: int = 10,
         max_rows: int = 200,
+        empty_hint: str = "No matching facts found in the knowledge graph.",
     ):
         self._store = store
         self._max_rows = max_rows
+        self._empty_hint = empty_hint
         self._retriever = GraphRetriever(
             store,
             max_hops=max_hops,
@@ -93,6 +99,6 @@ class GraphRagPath:
             path=self.name,
             sql=None,
             result=result,
-            narrative=_narrative(sg.seeds, shown, total, self._max_rows),
+            narrative=_narrative(sg.seeds, shown, total, self._max_rows, self._empty_hint),
             chart_spec=None,
         )

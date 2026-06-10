@@ -9,3 +9,8 @@ hint: >
   (a person), HAS_THEME -> a short theme phrase (e.g. "memory", "identity", "time"),
   FEATURES_CHARACTER -> a named character, and SET_IN -> a place or era. Prefer concise,
   reusable theme labels so films sharing a theme connect in the graph.
+empty_graph_hint: >
+  No matching facts found in the knowledge graph. This graph is built from the CMU plot-summary
+  corpus (roughly pre-2013), so newer titles — and films without a plot summary — may be absent.
+  Try naming a specific older film by its exact title, or use the SQL/data view for facts like
+  ratings, year, runtime, and cast counts.

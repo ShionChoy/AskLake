@@ -18,6 +18,7 @@ class GraphOntology:
     relation_types: tuple[str, ...] = ()
     attribute_relations: tuple[str, ...] = ()
     hint: str = ""
+    empty_graph_hint: str = ""
 
 
 def load_ontology(path: str | Path) -> GraphOntology:
@@ -27,4 +28,5 @@ def load_ontology(path: str | Path) -> GraphOntology:
         relation_types=tuple(data.get("relation_types", []) or []),
         attribute_relations=tuple(data.get("attribute_relations", []) or []),
         hint=(data.get("hint", "") or "").strip(),
+        empty_graph_hint=(data.get("empty_graph_hint", "") or "").strip(),
     )

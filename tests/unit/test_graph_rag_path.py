@@ -50,3 +50,14 @@ def test_run_caps_rows_and_notes_truncation():
     assert len(rr.result.rows) == 10  # capped
     assert "showing first 10 of" in rr.narrative  # truncation surfaced
     assert rr.narrative.count("[s") == 10  # only the shown facts are cited
+
+
+def test_empty_hint_is_configurable():
+    g = InMemoryGraphStore()
+    g.add(Triple("Inception", "HAS_THEME", "dreams", "s"))
+    # default keeps the generic message
+    assert "No matching facts" in GraphRagPath(g).run("totally unrelated zzz").narrative
+    # an injected hint replaces it on the no-match case
+    rr = GraphRagPath(g, empty_hint="not in the graph; use SQL").run("totally unrelated zzz")
+    assert rr.result is None
+    assert rr.narrative == "not in the graph; use SQL"
