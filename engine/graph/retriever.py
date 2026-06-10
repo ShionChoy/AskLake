@@ -14,6 +14,51 @@ def _tokens(text: str) -> set[str]:
     return set(_WORD.findall(text.lower()))
 
 
+# Generic query-structure tokens that must not, on their own, anchor a seed match: common
+# stopwords plus the graph query-intent words (mirrors GraphRagPath._GRAPH_HINTS). A film whose
+# title is made entirely of these (e.g. "The Theme", "The Plot") would otherwise seed off the
+# question's phrasing rather than its subject. Deliberately conservative — it excludes no
+# pronoun-like short words, so one-word titles such as "It"/"Us"/"Up" stay seedable.
+_NON_CONTENT = frozenset(
+    {
+        "the",
+        "a",
+        "an",
+        "of",
+        "and",
+        "or",
+        "to",
+        "for",
+        "in",
+        "on",
+        "with",
+        "by",
+        "at",
+        "as",
+        "is",
+        "are",
+        "theme",
+        "themes",
+        "plot",
+        "plots",
+        "story",
+        "stories",
+        "about",
+        "common",
+        "motif",
+        "motifs",
+        "character",
+        "characters",
+        "relationship",
+        "relationships",
+        "related",
+        "connect",
+        "connection",
+        "connects",
+    }
+)
+
+
 @dataclass(frozen=True)
 class RetrievedSubgraph:
     seeds: tuple[str, ...]
@@ -60,7 +105,11 @@ class LexicalSeedProvider:
         candidates: set[str] = set()
         for tok in qtok:  # union of posting lists of the question's tokens
             candidates |= self._index.get(tok, set())
-        matched = [e for e in candidates if self._entity_tokens[e] <= qtok]
+        matched = [
+            e
+            for e in candidates
+            if self._entity_tokens[e] <= qtok and not (self._entity_tokens[e] <= _NON_CONTENT)
+        ]
         # keep only maximal matches: drop a candidate whose tokens are a strict subset of
         # another candidate's (so "The Dark"/"Dark" drop out when "The Dark Knight" matches)
         maximal = [

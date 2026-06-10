@@ -134,3 +134,17 @@ def test_attribute_nodes_are_traversal_leaves():
     # the attribute hub must NOT fan out into the 100 unrelated films
     assert not any(s.startswith("Other Film") for s in subs)
     assert not any(o.startswith("Other Film") for o in objs)
+
+
+def test_structure_word_titles_do_not_seed():
+    g = InMemoryGraphStore()
+    g.add(Triple("The Theme", "HAS_THEME", "x", "s"))
+    g.add(Triple("Inception", "HAS_THEME", "dreams", "s"))
+    # "The Theme" is made entirely of stop/intent words -> must not seed a "theme of X" question
+    assert GraphRetriever(g).seeds("the theme of inception") == ["Inception"]
+
+
+def test_single_real_word_title_still_seeds():
+    g = InMemoryGraphStore()
+    g.add(Triple("Up", "HAS_THEME", "loss", "s"))  # a real one-word title (a content word)
+    assert GraphRetriever(g).seeds("the theme of up") == ["Up"]
