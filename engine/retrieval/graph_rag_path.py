@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import re
 
-from engine.graph.retriever import GraphRetriever, RetrievedSubgraph
-from engine.ports.graph_store import GraphStore
+from engine.graph.retriever import GraphRetriever
+from engine.ports.graph_store import GraphStore, Triple
 from engine.ports.retrieval import RetrievalResult
 from engine.ports.storage import QueryResult
 
@@ -35,12 +35,17 @@ def _words(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", text.lower()))
 
 
-def _narrative(subgraph: RetrievedSubgraph) -> str:
-    if not subgraph.triples:
+def _narrative(
+    seeds: tuple[str, ...], triples: tuple[Triple, ...], total: int, max_rows: int
+) -> str:
+    if not triples:
         return "No matching facts found in the knowledge graph."
-    seeds = ", ".join(subgraph.seeds) if subgraph.seeds else "the question"
-    lines = [f"{t.subject} {t.relation} {t.obj} [{t.source}]" for t in subgraph.triples]
-    return f"From the knowledge graph, starting at {seeds}:\n" + "\n".join(lines)
+    seed_str = ", ".join(seeds) if seeds else "the question"
+    lines = [f"{t.subject} {t.relation} {t.obj} [{t.source}]" for t in triples]
+    body = f"From the knowledge graph, starting at {seed_str}:\n" + "\n".join(lines)
+    if total > len(triples):
+        body += f"\n… (showing first {max_rows} of {total} facts)"
+    return body
 
 
 class GraphRagPath:
@@ -57,8 +62,10 @@ class GraphRagPath:
         *,
         attribute_relations: frozenset[str] = frozenset(),
         top_k_seeds: int = 10,
+        max_rows: int = 200,
     ):
         self._store = store
+        self._max_rows = max_rows
         self._retriever = GraphRetriever(
             store,
             max_hops=max_hops,
@@ -74,7 +81,9 @@ class GraphRagPath:
 
     def run(self, question: str) -> RetrievalResult:
         sg = self._retriever.retrieve(question)
-        rows = [(t.subject, t.relation, t.obj, t.source) for t in sg.triples]
+        total = len(sg.triples)
+        shown = sg.triples[: self._max_rows]
+        rows = [(t.subject, t.relation, t.obj, t.source) for t in shown]
         result = (
             QueryResult(columns=["subject", "relation", "object", "source"], rows=rows)
             if rows
@@ -84,6 +93,6 @@ class GraphRagPath:
             path=self.name,
             sql=None,
             result=result,
-            narrative=_narrative(sg),
+            narrative=_narrative(sg.seeds, shown, total, self._max_rows),
             chart_spec=None,
         )

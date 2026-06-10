@@ -39,3 +39,14 @@ def test_run_with_no_match_degrades_gracefully():
     assert rr.path == "graph"
     assert rr.result is None
     assert "No matching facts" in rr.narrative
+
+
+def test_run_caps_rows_and_notes_truncation():
+    g = InMemoryGraphStore()
+    for i in range(50):
+        g.add(Triple("Hub", "REL", f"Leaf {i}", f"s{i}"))  # seed "Hub" -> 50 facts
+    rr = GraphRagPath(g, max_rows=10).run("hub")
+    assert rr.result is not None
+    assert len(rr.result.rows) == 10  # capped
+    assert "showing first 10 of" in rr.narrative  # truncation surfaced
+    assert rr.narrative.count("[s") == 10  # only the shown facts are cited
