@@ -12,23 +12,33 @@ from engine.graph.store import InMemoryGraphStore
 from engine.ports.graph_store import Triple
 
 
+def _triple_line(t: Triple) -> str:
+    return json.dumps(
+        {"subject": t.subject, "relation": t.relation, "obj": t.obj, "source": t.source}
+    )
+
+
 def save_triples(triples: Iterable[Triple], path: str | Path) -> None:
     """Write triples as JSONL, creating parent directories as needed."""
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:
         for t in triples:
-            f.write(
-                json.dumps(
-                    {
-                        "subject": t.subject,
-                        "relation": t.relation,
-                        "obj": t.obj,
-                        "source": t.source,
-                    }
-                )
-                + "\n"
-            )
+            f.write(_triple_line(t) + "\n")
+
+
+def append_triples(triples: Iterable[Triple], path: str | Path) -> int:
+    """Append triples to an existing JSONL graph (created by save_triples), streaming so a crash
+    keeps what was written. Returns the number appended."""
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    n = 0
+    with p.open("a", encoding="utf-8") as f:
+        for t in triples:
+            f.write(_triple_line(t) + "\n")
+            f.flush()
+            n += 1
+    return n
 
 
 def load_store(path: str | Path) -> InMemoryGraphStore:

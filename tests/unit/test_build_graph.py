@@ -26,3 +26,27 @@ def test_build_and_save_writes_triples(tmp_path):
     assert "Christopher Nolan" in store.entities()
     rows = [(t.subject, t.relation, t.obj, t.source) for t in store.triples()]
     assert ("The Dark Knight", "HAS_THEME", "chaos", "cmu:1") in rows
+
+
+def test_build_and_save_parallel_writes_structured_then_themes(tmp_path):
+    from engine.ports.graph_store import Triple
+    from scripts.build_graph import build_and_save_parallel
+
+    docs = [
+        PlotDoc(id="cmu:1", title="The Dark Knight", text="Batman vs the Joker."),
+        PlotDoc(id="cmu:2", title="Inception", text="A thief in dreams."),
+    ]
+    ontology = GraphOntology(relation_types=("HAS_THEME",), hint="themes")
+    extraction = [
+        "The Dark Knight | HAS_THEME | chaos\n",
+        "Inception | HAS_THEME | dreams\n",
+    ]
+    structured = [Triple("The Dark Knight", "HAS_GENRE", "Action", "cmu:1")]
+    out = tmp_path / "triples.jsonl"
+    count = build_and_save_parallel(
+        structured, docs, FakeLLMProvider(extraction), ontology, out, workers=2
+    )
+    assert count == 2  # theme-triple count (structured are written separately)
+    rows = {(t.subject, t.relation, t.obj) for t in load_store(out).triples()}
+    assert ("The Dark Knight", "HAS_GENRE", "Action") in rows  # structured present
+    assert ("Inception", "HAS_THEME", "dreams") in rows  # theme present
