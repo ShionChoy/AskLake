@@ -61,3 +61,26 @@ def test_empty_hint_is_configurable():
     rr = GraphRagPath(g, empty_hint="not in the graph; use SQL").run("totally unrelated zzz")
     assert rr.result is None
     assert rr.narrative == "not in the graph; use SQL"
+
+
+def test_typed_path_cast_vs_theme_differ():
+    from engine.graph.intent import IntentResolver
+    from engine.graph.ontology import GraphOntology, Intent
+
+    g = InMemoryGraphStore()
+    g.add(Triple("Inception", "ACTED_IN", "Leonardo DiCaprio", "s"))
+    g.add(Triple("Inception", "HAS_THEME", "dreams", "s"))
+    ont = GraphOntology(
+        relation_types=("ACTED_IN", "HAS_THEME"),
+        connective_relations=("HAS_THEME",),
+        intents=(
+            Intent("cast", frozenset({"actors"}), frozenset({"ACTED_IN"}), "entity_lookup"),
+            Intent("themes", frozenset({"themes"}), frozenset({"HAS_THEME"}), "cluster"),
+        ),
+    )
+    p = GraphRagPath(
+        g, connective_relations=frozenset({"HAS_THEME"}), intent_resolver=IntentResolver(ont)
+    )
+    cast = {r[1] for r in p.run("actors of Inception").result.rows}
+    themes = {r[1] for r in p.run("themes of Inception").result.rows}
+    assert cast == {"ACTED_IN"} and themes == {"HAS_THEME"}
