@@ -24,7 +24,7 @@ AskLake answers plain-English questions through two grounded retrieval paths —
 
 ### Data scale
 
-The app and knowledge graph run on real data well beyond a toy slice: an IMDb working set of **~514K titles** (movies + TV series + TV movies; `make build-imdb-full`) and a CMU-derived knowledge graph of **915,291 triples across ~42,800 films and ~229,500 entities** (`make build-graph`). The graph is mostly a zero-cost deterministic backbone — genres, languages, countries, cast & characters from CMU metadata, plus **47,746 authoritative `DIRECTED_BY` edges from IMDb** (~884K triples total) — layered with ~31K LLM-extracted plot-theme and setting triples over the 2,000 most-popular aligned films. The evaluation benchmark deliberately stays on a controlled ~243K-movie slice (see *Evaluation*).
+The app and knowledge graph run on real data well beyond a toy slice: an IMDb working set of **~514K titles** (movies + TV series + TV movies; `make build-imdb-full`) and a knowledge graph built IMDb-native (`make build-graph`). The graph is a deterministic backbone of genres, release year, directors, cast & characters sourced entirely from the IMDb parquet (numVotes ≥ 1000 films, cast capped top-10 per film), layered with LLM-extracted plot-theme triples drawn from **current English Wikipedia plot text** (fetched via a Wikidata P345 ID bridge) for the most-popular films. The evaluation benchmark deliberately stays on a controlled ~243K-movie slice (see *Evaluation*).
 
 ---
 
@@ -56,7 +56,7 @@ make build-imdb                 # converts TSVs → Parquet; safe to re-run
 ### 3b. (Optional) Build the knowledge graph for GraphRAG
 
 ```bash
-GRAPH_FILMS=200 make build-graph    # one-time LLM extraction over CMU plots; needs your key
+GRAPH_FILMS=200 make build-graph    # one-time LLM extraction over Wikipedia plots; needs your key
 # writes data/imdb/graph/triples.jsonl; the API loads it automatically at boot
 ```
 
@@ -245,6 +245,8 @@ tests/           # unit + integration tests
 
 **IMDb data** is non-commercial (Terms of Use prohibit redistribution). Raw TSV files are downloaded on demand via `bash scripts/download_data.sh` and written into `data/` (gitignored — never committed to this repo).
 
-**CMU Movie Summary Corpus** is licensed CC BY-SA 4.0 (attribution + share-alike).
+**Wikipedia plot text** is licensed **CC BY-SA 4.0** (attribution + share-alike). Plot summaries are fetched at graph-build time from the English Wikipedia API via a Wikidata P345 IMDb-ID bridge; the fetched text is not committed to this repo.
 
 **Project code** is licensed **Apache-2.0**. See `LICENSE`.
+
+> TMDB was evaluated as an additional plot-text source and rejected: its API terms prohibit use "in connection with ... a machine learning (ML) or artificial intelligence (AI) based Application."
