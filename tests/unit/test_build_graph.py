@@ -50,3 +50,28 @@ def test_build_and_save_parallel_writes_structured_then_themes(tmp_path):
     rows = {(t.subject, t.relation, t.obj) for t in load_store(out).triples()}
     assert ("The Dark Knight", "HAS_GENRE", "Action") in rows  # structured present
     assert ("Inception", "HAS_THEME", "dreams") in rows  # theme present
+
+
+def test_theme_ontology_restricts_to_theme_and_setting():
+    from engine.graph.ontology import load_ontology
+    from scripts.build_graph import theme_ontology
+
+    full = load_ontology("datasets/imdb_cmu/graph/ontology.yaml")
+    restricted = theme_ontology(full)
+    assert set(restricted.relation_types) == {"HAS_THEME", "SET_IN"}
+
+
+def test_theme_extraction_drops_structured_relations():
+    from engine.graph.extraction import PlotDoc, extract_triples
+    from engine.graph.ontology import load_ontology
+    from engine.llm.fake import FakeLLMProvider
+    from scripts.build_graph import theme_ontology
+
+    restricted = theme_ontology(load_ontology("datasets/imdb_cmu/graph/ontology.yaml"))
+    # canned LLM output mixing a theme, a director, and a setting
+    llm = FakeLLMProvider(
+        responses=["X | HAS_THEME | chaos\nX | DIRECTED_BY | Someone\nX | SET_IN | Gotham\n"]
+    )
+    doc = PlotDoc(id="wiki:tt1", title="X", text="...")
+    rels = {t.relation for t in extract_triples(llm, doc, restricted)}
+    assert rels == {"HAS_THEME", "SET_IN"}  # DIRECTED_BY filtered out by restricted ontology

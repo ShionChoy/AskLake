@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import replace
 from pathlib import Path
 
 from datasets.imdb_cmu.graph_corpus import select_plot_docs
@@ -21,6 +22,19 @@ from engine.llm.factory import make_provider
 from engine.ports.llm import LLMProvider
 
 ONTOLOGY_YAML = "datasets/imdb_cmu/graph/ontology.yaml"
+
+_THEME_RELATIONS = ("HAS_THEME", "SET_IN")
+_THEME_HINT = (
+    "Use the film's title as the subject. Emit HAS_THEME -> a short, reusable theme phrase "
+    '(e.g. "memory", "identity", "time") and SET_IN -> a place or era. Prefer concise, reusable '
+    "theme labels so films sharing a theme connect. Do NOT emit cast, directors, or genres."
+)
+
+
+def theme_ontology(ontology: GraphOntology) -> GraphOntology:
+    """Restrict LLM extraction to themes + setting; IMDb supplies structured facts deterministically
+    (so the plot-text pass must not re-extract director/cast/genre)."""
+    return replace(ontology, relation_types=_THEME_RELATIONS, hint=_THEME_HINT)
 
 
 def build_and_save(
@@ -85,6 +99,7 @@ def main() -> int:
         return 1
 
     ontology = load_ontology(ONTOLOGY_YAML)
+    theme_ont = theme_ontology(ontology)
     structured = list(structured_triples(parquet_dir, min_votes=min_votes, cast_cap=cast_cap))
     print(
         f"[build_graph] {len(structured)} structured triple(s) (numVotes>={min_votes}, "
@@ -96,7 +111,7 @@ def main() -> int:
         f"with {workers} workers"
     )
     theme_count = build_and_save_parallel(
-        structured, docs, llm, ontology, out_path, workers=workers
+        structured, docs, llm, theme_ont, out_path, workers=workers
     )
     print(
         f"[build_graph] done: {len(structured)} structured + {theme_count} theme triple(s) "
