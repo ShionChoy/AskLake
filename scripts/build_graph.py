@@ -1,10 +1,10 @@
-"""Offline GraphRAG build: extract triples from CMU plots (aligned to the top-N IMDb films) and
-persist them for the server to load. One LLM call per plot.
+"""Offline GraphRAG build: extract triples from IMDb-native structured data and Wikipedia plots
+for the top-N popular films. One LLM call per plot for theme extraction.
 
 Usage (from the repo root):
     DEEPSEEK_API_KEY=... uv run python -m scripts.build_graph
-Env: ASKLAKE_PARQUET_DIR, ASKLAKE_CMU_DIR, ASKLAKE_GRAPH_PATH, GRAPH_FILMS (default 2000),
-     GRAPH_WORKERS (default 12)."""
+Env: ASKLAKE_PARQUET_DIR, ASKLAKE_GRAPH_PATH, GRAPH_FILMS (default 2000),
+     GRAPH_MIN_VOTES (default 1000), GRAPH_CAST_CAP (default 10), GRAPH_WORKERS (default 12)."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from datasets.imdb_cmu.graph_corpus import aligned_films, imdb_movie_index, select_plot_docs
-from datasets.imdb_cmu.graph_structured import imdb_crew_triples, structured_triples
+from datasets.imdb_cmu.graph_corpus import select_plot_docs
+from datasets.imdb_cmu.graph_structured import structured_triples
 from engine.graph.extraction import PlotDoc, extract_triples
 from engine.graph.ontology import GraphOntology, load_ontology
 from engine.graph.persistence import append_triples, save_triples
@@ -67,18 +67,15 @@ def build_and_save_parallel(structured, docs, llm, ontology, out_path, workers=1
 
 def main() -> int:
     parquet_dir = os.environ.get("ASKLAKE_PARQUET_DIR", "data/imdb/parquet")
-    cmu_dir = os.environ.get("ASKLAKE_CMU_DIR", "data/cmu/raw/MovieSummaries")
     out_path = os.environ.get("ASKLAKE_GRAPH_PATH", "data/imdb/graph/triples.jsonl")
     n = int(os.environ.get("GRAPH_FILMS", "2000"))
+    min_votes = int(os.environ.get("GRAPH_MIN_VOTES", "1000"))
+    cast_cap = int(os.environ.get("GRAPH_CAST_CAP", "10"))
     workers = int(os.environ.get("GRAPH_WORKERS", "12"))
 
     if not Path(parquet_dir).exists():
         print(f"[build_graph] parquet dir not found: {parquet_dir} — run `make build-imdb` first.")
         return 1
-    if not (Path(cmu_dir) / "plot_summaries.txt").exists():
-        print(f"[build_graph] CMU corpus not found in {cmu_dir} — run scripts/download_data.sh.")
-        return 1
-
     try:
         llm = make_provider()
     except Exception as exc:  # noqa: BLE001
@@ -87,19 +84,16 @@ def main() -> int:
         )
         return 1
 
-    index = imdb_movie_index(parquet_dir)
-    aligned = aligned_films(cmu_dir, index)
-    docs = select_plot_docs(cmu_dir, index, n)
-    if not docs:
-        print("[build_graph] no CMU plots aligned to IMDb films — nothing to build.")
-        return 1
     ontology = load_ontology(ONTOLOGY_YAML)
-    structured = list(structured_triples(cmu_dir, aligned)) + list(
-        imdb_crew_triples(parquet_dir, aligned)
-    )
+    structured = list(structured_triples(parquet_dir, min_votes=min_votes, cast_cap=cast_cap))
     print(
-        f"[build_graph] {len(structured)} structured triple(s); extracting themes from "
-        f"{len(docs)} plot(s) with {workers} workers -> {out_path}"
+        f"[build_graph] {len(structured)} structured triple(s) (numVotes>={min_votes}, "
+        f"cast<={cast_cap}); fetching top-{n} Wikipedia plots for theme extraction -> {out_path}"
+    )
+    docs = select_plot_docs(parquet_dir, n)
+    print(
+        f"[build_graph] {len(docs)} plot(s) resolved from Wikipedia; extracting themes "
+        f"with {workers} workers"
     )
     theme_count = build_and_save_parallel(
         structured, docs, llm, ontology, out_path, workers=workers
