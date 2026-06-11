@@ -18,11 +18,11 @@ class IntentResolver:
 
     def resolve(self, question: str) -> Intent:
         q = set(_WORD.findall(question.lower()))
-        best: tuple[int, Intent] | None = None
-        for intent in self._intents:  # declaration order; most trigger hits wins, ties -> first
-            hits = len(q & intent.triggers)
-            if hits and (best is None or hits > best[0]):
-                best = (hits, intent)
-        if best is not None:
-            return best[1]
+        scored = [
+            (len(q & i.triggers), 1 if i.shape == "pairwise" else 0, -idx, i)
+            for idx, i in enumerate(self._intents)
+        ]
+        scored = [s for s in scored if s[0] > 0]
+        if scored:  # most trigger hits; tie -> prefer pairwise; tie -> earliest declared
+            return max(scored, key=lambda s: (s[0], s[1], s[2]))[3]
         return Intent(name="open", triggers=frozenset(), target_relations=self._all, shape="open")

@@ -28,3 +28,12 @@ def test_no_trigger_falls_back_to_open_over_all_relations():
     i = _resolver().resolve("Inception")
     assert i.shape == "open"
     assert "HAS_THEME" in i.target_relations and "ACTED_IN" in i.target_relations
+
+
+def test_pairwise_wins_tie_over_themes_for_share_question():
+    i = _resolver().resolve("what themes do Inception and Interstellar share")
+    assert i.name == "connection" and i.shape == "pairwise"
+
+
+def test_plain_themes_question_still_cluster():
+    assert _resolver().resolve("what are the themes of Inception").name == "themes"
