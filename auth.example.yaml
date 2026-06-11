@@ -1,0 +1,5 @@
+# auth.example.yaml  — copy to auth.yaml (gitignored) and replace the demo tokens.
+# Each role MUST be one of the roles declared in datasets/<name>/governance.yaml.
+tokens:
+  tok_analyst_demo: {user: alice,  role: analyst}
+  tok_public_demo:  {user: viewer, role: public}
