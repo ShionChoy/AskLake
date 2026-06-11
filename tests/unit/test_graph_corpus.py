@@ -53,3 +53,10 @@ def test_select_plot_docs_skips_film_on_fetch_error(tmp_path):
     docs = select_plot_docs(_fixture_parquet(tmp_path / "pq"), max_films=10, wiki=_RaisingWiki())
     titles = {d.title for d in docs}
     assert titles == {"The Matrix"}  # Inception skipped, build did not abort
+
+
+def test_select_plot_docs_parallel_fetches_all(tmp_path):
+    docs = select_plot_docs(
+        _fixture_parquet(tmp_path / "pq"), max_films=10, wiki=_FakeWiki(), workers=4
+    )
+    assert {d.title for d in docs} == {"The Matrix", "Inception"}  # both fetched under parallel

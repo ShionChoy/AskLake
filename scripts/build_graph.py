@@ -110,6 +110,7 @@ def main() -> int:
     min_votes = int(os.environ.get("GRAPH_MIN_VOTES", "1000"))
     cast_cap = int(os.environ.get("GRAPH_CAST_CAP", "10"))
     workers = int(os.environ.get("GRAPH_WORKERS", "12"))
+    fetch_workers = int(os.environ.get("GRAPH_FETCH_WORKERS", "8"))
 
     if not Path(parquet_dir).exists():
         print(f"[build_graph] parquet dir not found: {parquet_dir} — run `make build-imdb` first.")
@@ -127,19 +128,22 @@ def main() -> int:
     structured = list(structured_triples(parquet_dir, min_votes=min_votes, cast_cap=cast_cap))
     print(
         f"[build_graph] {len(structured)} structured triple(s) (numVotes>={min_votes}, "
-        f"cast<={cast_cap}); fetching top-{n} Wikipedia plots for theme extraction -> {out_path}"
+        f"cast<={cast_cap}); fetching top-{n} Wikipedia plots for theme extraction -> {out_path}",
+        flush=True,
     )
-    docs = select_plot_docs(parquet_dir, n)
+    docs = select_plot_docs(parquet_dir, n, workers=fetch_workers)
     print(
         f"[build_graph] {len(docs)} plot(s) resolved from Wikipedia; extracting themes "
-        f"with {workers} workers"
+        f"with {workers} workers",
+        flush=True,
     )
     theme_count = build_and_save_parallel(
         structured, docs, llm, theme_ont, out_path, workers=workers
     )
     print(
         f"[build_graph] done: {len(structured)} structured + {theme_count} theme triple(s) "
-        f"-> {out_path}"
+        f"-> {out_path}",
+        flush=True,
     )
     return 0
 
