@@ -1,117 +1,81 @@
-"""Deterministic structured triples from the CMU metadata TSVs (zero LLM) + authoritative
-directors from the IMDb parquet. Films are titled by their aligned IMDb primaryTitle so graph
-subjects match the SQL side. Dataset-specific; the engine never imports this."""
+"""Deterministic structured triples built directly from the IMDb parquet (zero LLM, zero CMU).
+Films are titled by IMDb primaryTitle so graph subjects match the SQL side. Covers the
+numVotes>=min_votes movie set; cast capped at top-`cast_cap` billed principals. Dataset-specific;
+the engine never imports this."""
 
 from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from pathlib import Path
 
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 from engine.ports.graph_store import Triple
 
+_CAST_CATEGORIES = ("actor", "actress", "self")
 
-def _names(cell: str) -> list[str]:
-    """CMU genre/language/country columns are JSON dicts {freebase_id: name}; return the names."""
+
+def _characters(cell: str) -> list[str]:
+    """IMDb `characters` is a JSON array string like '["Neo"]'; tolerate \\N / empty / bad JSON."""
     cell = (cell or "").strip()
-    if not cell or cell == "{}":
+    if not cell or cell == r"\N":
         return []
     try:
-        return [v for v in json.loads(cell).values() if v]
-    except (ValueError, AttributeError):
+        return [c for c in json.loads(cell) if c]
+    except (ValueError, TypeError):
         return []
 
 
-def _year(release_date: str) -> str | None:
-    rd = (release_date or "").strip()
-    return rd[:4] if len(rd) >= 4 and rd[:4].isdigit() else None
-
-
-def structured_triples(cmu_dir: str, aligned: dict[str, tuple[str, str, int]]) -> Iterator[Triple]:
-    """Yield film/genre/language/country/year + character/actor triples for the films in `aligned`
-    ({wiki_id: (imdb_title, tconst, votes)}). Unaligned CMU films are skipped."""
-    seen: set[tuple[str, str, str, str]] = set()
-    cmu = Path(cmu_dir)
-    with (cmu / "movie.metadata.tsv").open(encoding="utf-8") as f:
-        for line in f:
-            p = line.rstrip("\n").split("\t")
-            if len(p) < 9 or p[0].strip() not in aligned:
-                continue
-            wiki_id = p[0].strip()
-            title = aligned[wiki_id][0]
-            src = f"cmu:{wiki_id}"
-            for g in _names(p[8]):
-                key = (title, "HAS_GENRE", g, src)
-                if key not in seen:
-                    seen.add(key)
-                    yield Triple(title, "HAS_GENRE", g, src)
-            for lang in _names(p[6]):
-                key = (title, "IN_LANGUAGE", lang, src)
-                if key not in seen:
-                    seen.add(key)
-                    yield Triple(title, "IN_LANGUAGE", lang, src)
-            for country in _names(p[7]):
-                key = (title, "FROM_COUNTRY", country, src)
-                if key not in seen:
-                    seen.add(key)
-                    yield Triple(title, "FROM_COUNTRY", country, src)
-            yr = _year(p[3])
-            if yr:
-                key = (title, "RELEASED_IN", yr, src)
-                if key not in seen:
-                    seen.add(key)
-                    yield Triple(title, "RELEASED_IN", yr, src)
-    char_path = cmu / "character.metadata.tsv"
-    if not char_path.exists():
-        return
-    with char_path.open(encoding="utf-8") as f:
-        for line in f:
-            p = line.rstrip("\n").split("\t")
-            if len(p) < 9 or p[0].strip() not in aligned:
-                continue
-            wiki_id = p[0].strip()
-            title = aligned[wiki_id][0]
-            src = f"cmu:{wiki_id}"
-            character, actor = p[3].strip(), p[8].strip()
-            if character:
-                key = (title, "FEATURES_CHARACTER", character, src)
-                if key not in seen:
-                    seen.add(key)
-                    yield Triple(title, "FEATURES_CHARACTER", character, src)
-            if character and actor:
-                key = (character, "PLAYED_BY", actor, src)
-                if key not in seen:
-                    seen.add(key)
-                    yield Triple(character, "PLAYED_BY", actor, src)
-            if actor:
-                key = (actor, "ACTED_IN", title, src)
-                if key not in seen:
-                    seen.add(key)
-                    yield Triple(actor, "ACTED_IN", title, src)
-
-
-def imdb_crew_triples(
-    parquet_dir: str, aligned: dict[str, tuple[str, str, int]]
+def structured_triples(
+    parquet_dir: str, *, min_votes: int = 1000, cast_cap: int = 10
 ) -> Iterator[Triple]:
-    """`film -DIRECTED_BY-> director`, sourced authoritatively from the IMDb parquet (CMU metadata
-    has no director field). `aligned` = {wiki_id: (imdb_title, tconst, votes)}; one query over the
-    whole title_crew⋈name_basics, filtered to the aligned tconsts. source='imdb:<tconst>'."""
-    title_by_tconst = {tconst: title for title, tconst, _votes in aligned.values()}
-    if not title_by_tconst:
-        return
+    """Yield HAS_GENRE / RELEASED_IN / DIRECTED_BY / ACTED_IN / FEATURES_CHARACTER / PLAYED_BY
+    for every movie with numVotes >= min_votes. source = 'imdb:<tconst>'."""
     backend = DuckDBBackend(parquet_dir=parquet_dir)
+    seen: set[tuple[str, str, str]] = set()
+
+    def emit(s: str, rel: str, o: str, tconst: str) -> Iterator[Triple]:
+        key = (s, rel, o)
+        if s and o and key not in seen:
+            seen.add(key)
+            yield Triple(s, rel, o, f"imdb:{tconst}")
+
+    # genres + year
     res = backend.run_sql(
-        "SELECT t.tconst, n.primaryName FROM ("
-        "SELECT tconst, UNNEST(string_split(directors, ',')) AS nconst FROM title_crew "
-        "WHERE directors IS NOT NULL AND directors != ''"
-        ") t JOIN name_basics n ON n.nconst = t.nconst"
+        f"SELECT b.tconst, b.primaryTitle, b.startYear, b.genres "
+        f"FROM title_basics b JOIN title_ratings r USING(tconst) "
+        f"WHERE b.titleType='movie' AND r.numVotes >= {int(min_votes)}"
     )
-    seen: set[tuple[str, str, str, str]] = set()
-    for tconst, director in res.rows:
-        title = title_by_tconst.get(tconst)
-        if title and director:
-            key = (title, "DIRECTED_BY", director, f"imdb:{tconst}")
-            if key not in seen:
-                seen.add(key)
-                yield Triple(title, "DIRECTED_BY", director, f"imdb:{tconst}")
+    for tconst, title, year, genres in res.rows:
+        for g in (genres or "").split(","):
+            g = g.strip()
+            if g and g != r"\N":
+                yield from emit(title, "HAS_GENRE", g, tconst)
+        if year not in (None, "", r"\N"):
+            yield from emit(title, "RELEASED_IN", str(year), tconst)
+
+    # directors (authoritative from IMDb)
+    res = backend.run_sql(
+        f"SELECT b.tconst, b.primaryTitle, n.primaryName FROM ("
+        f"  SELECT tconst, UNNEST(string_split(directors, ',')) AS nconst FROM title_crew "
+        f"  WHERE directors IS NOT NULL AND directors != '' AND directors != '\\N'"
+        f") c JOIN title_basics b USING(tconst) JOIN title_ratings r USING(tconst) "
+        f"JOIN name_basics n ON n.nconst = c.nconst "
+        f"WHERE b.titleType='movie' AND r.numVotes >= {int(min_votes)}"
+    )
+    for tconst, title, director in res.rows:
+        yield from emit(title, "DIRECTED_BY", director, tconst)
+
+    # cast + characters (top-`cast_cap` billed)
+    res = backend.run_sql(
+        f"SELECT b.tconst, b.primaryTitle, n.primaryName, p.characters "
+        f"FROM title_principals p "
+        f"JOIN title_basics b USING(tconst) JOIN title_ratings r USING(tconst) "
+        f"JOIN name_basics n ON n.nconst = p.nconst "
+        f"WHERE b.titleType='movie' AND r.numVotes >= {int(min_votes)} "
+        f"AND p.category IN {_CAST_CATEGORIES} AND p.ordering <= {int(cast_cap)}"
+    )
+    for tconst, title, actor, characters in res.rows:
+        yield from emit(actor, "ACTED_IN", title, tconst)
+        for ch in _characters(characters):
+            yield from emit(title, "FEATURES_CHARACTER", ch, tconst)
+            yield from emit(ch, "PLAYED_BY", actor, tconst)
