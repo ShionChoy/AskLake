@@ -32,6 +32,8 @@ class Policy:
     pii_columns: tuple[str, ...] = ()
     mask_roles: tuple[str, ...] = ()  # roles whose PII columns are masked
     row_filters: dict[str, tuple[RowFilter, ...]] = field(default_factory=dict)  # role -> filters
+    roles: tuple[str, ...] = ()
+    row_security: dict[str, dict[str, str]] = field(default_factory=dict)  # role -> {table: predicate}
     require_limit: bool = False
     forbid_writes: bool = True
 
@@ -47,11 +49,17 @@ def load_policy(path: str | Path) -> Policy:
         )
         for role, filters in (data.get("row_filters", {}) or {}).items()
     }
+    row_security = {
+        role: {str(tbl): str(pred) for tbl, pred in (tables or {}).items()}
+        for role, tables in (data.get("row_security", {}) or {}).items()
+    }
     guard = data.get("cost_guardrail", {}) or {}
     return Policy(
         pii_columns=tuple(data.get("pii_columns", []) or []),
         mask_roles=mask_roles,
         row_filters=row_filters,
+        roles=tuple(roles.keys()),
+        row_security=row_security,
         require_limit=bool(guard.get("require_limit", False)),
         forbid_writes=bool(guard.get("forbid_writes", True)),
     )
