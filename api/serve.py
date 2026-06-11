@@ -19,6 +19,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from api.main import create_app
+from engine.graph.intent import IntentResolver
 from engine.graph.ontology import load_ontology
 from engine.graph.persistence import load_store
 from engine.lakehouse.duckdb_backend import DuckDBBackend
@@ -26,7 +27,7 @@ from engine.llm.factory import make_provider
 from engine.ports.llm import LLMProvider
 from engine.ports.storage import QueryResult, StorageBackend
 from engine.retrieval.agentic_sql_path import AgenticSqlPath
-from engine.retrieval.graph_rag_path import GraphRagPath
+from engine.retrieval.graph_rag_path import GraphRagPath, GroundedGraphRagPath
 from engine.retrieval.grounded_sql_path import GroundedSqlPath
 from engine.retrieval.router import Router
 from engine.retrieval.synthesizer import Synthesizer
@@ -155,7 +156,8 @@ class _TracingBackend:
 
 
 class _TracingGraphPath:
-    """Wraps GraphRagPath to record a trace step. The graph path makes no LLM call."""
+    """Wraps a graph path to record a trace step. When wrapping GroundedGraphRagPath the inner
+    path makes one LLM call to turn retrieved facts into a natural-language answer."""
 
     name = "graph"
 
@@ -241,26 +243,34 @@ def build_app(
             print(f"[api.serve] failed to load graph at {GRAPH_PATH} ({exc}); graph disabled")
             graph_store = None
     graph_attr_relations: frozenset[str] = frozenset()
+    graph_connective: frozenset[str] = frozenset()
     graph_empty_hint = "No matching facts found in the knowledge graph."
+    intent_resolver = None
     try:
         _ontology = load_ontology(ONTOLOGY_YAML)
         graph_attr_relations = frozenset(_ontology.attribute_relations)
+        graph_connective = frozenset(_ontology.connective_relations)
+        if _ontology.intents:
+            intent_resolver = IntentResolver(_ontology)
         if _ontology.empty_graph_hint:
             graph_empty_hint = _ontology.empty_graph_hint
-    except Exception as exc:  # noqa: BLE001 - degrade to defaults
-        print(f"[api.serve] ontology unavailable ({exc}); seeding without attribute exclusion")
-    graph_path = (
-        _TracingGraphPath(
-            GraphRagPath(
-                graph_store,
-                attribute_relations=graph_attr_relations,
-                empty_hint=graph_empty_hint,
-            ),
-            log,
+    except Exception as exc:  # noqa: BLE001
+        print(f"[api.serve] ontology unavailable ({exc}); seeding without typing")
+
+    if graph_store is not None:
+        _base_graph = GraphRagPath(
+            graph_store,
+            attribute_relations=graph_attr_relations,
+            connective_relations=graph_connective,
+            intent_resolver=intent_resolver,
+            empty_hint=graph_empty_hint,
         )
-        if graph_store is not None
-        else None
-    )
+        _graph_impl = _base_graph
+        if default_llm is not None:
+            _graph_impl = GroundedGraphRagPath(_base_graph, default_llm)
+        graph_path = _TracingGraphPath(_graph_impl, log)
+    else:
+        graph_path = None
     synth = Synthesizer()
     # router.route() only scores the question — it never calls sql_path.run — so passing
     # default_path (which may be None when there is no boot key) is safe. Execution below uses

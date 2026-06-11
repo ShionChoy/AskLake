@@ -55,3 +55,15 @@ def test_top_k_and_specificity_order():
 
 def test_empty_question_no_seeds():
     assert LexicalEntityLinker(_store("Inception")).seeds("") == []
+
+
+def test_common_verb_does_not_seed_short_title():
+    g = _store("Do", "Inception", "Interstellar")
+    linker = LexicalEntityLinker(g)
+    seeds = linker.seeds("what themes do Inception and Interstellar share")
+    assert "Do" not in seeds
+    assert set(seeds) == {"Inception", "Interstellar"}
+
+
+def test_content_one_word_title_still_seeds_after_guard():
+    assert LexicalEntityLinker(_store("Up")).seeds("the theme of up") == ["Up"]

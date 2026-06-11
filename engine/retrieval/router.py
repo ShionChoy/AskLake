@@ -58,6 +58,19 @@ _GRAPH_HINTS = frozenset(
         "connect",
         "connection",
         "connects",
+        "actor",
+        "actors",
+        "cast",
+        "starred",
+        "starring",
+        "acted",
+        "director",
+        "directors",
+        "directed",
+        "between",
+        "share",
+        "shared",
+        "similar",
     }
 )
 

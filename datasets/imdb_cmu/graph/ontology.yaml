@@ -8,7 +8,7 @@ attribute_relations: [HAS_GENRE, RELEASED_IN]
 connective_relations: [HAS_THEME]
 entity_relations: [DIRECTED_BY, ACTED_IN, FEATURES_CHARACTER, PLAYED_BY, SET_IN]
 intents:
-  - {name: cast,       shape: entity_lookup, triggers: [actor, actors, cast, starred, star, stars, plays, played, role, roles], target_relations: [ACTED_IN, PLAYED_BY, FEATURES_CHARACTER]}
+  - {name: cast,       shape: entity_lookup, triggers: [actor, actors, cast, starred, starring, star, stars, plays, played, acted, acting, appears, appearing, role, roles], target_relations: [ACTED_IN, PLAYED_BY, FEATURES_CHARACTER]}
   - {name: director,   shape: entity_lookup, triggers: [director, directors, directed, directs, filmmaker, made], target_relations: [DIRECTED_BY]}
   - {name: themes,     shape: cluster,       triggers: [theme, themes, motif, motifs, about, plot, story, message, meaning], target_relations: [HAS_THEME]}
   - {name: connection, shape: pairwise,      triggers: [related, connection, connected, common, between, share, shared, link, links, similar, both], target_relations: [HAS_THEME, DIRECTED_BY, ACTED_IN]}
