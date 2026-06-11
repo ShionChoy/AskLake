@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -123,9 +124,10 @@ class LexicalSeedProvider:
 
 
 class GraphRetriever:
-    """Multi-hop retrieval over a GraphStore: find seed entities named in the question, BFS-expand
-    up to `max_hops`, and return the connected subgraph (triples carry source citations). Lexical
-    seed-matching is the hermetic stand-in for an embedding-based entity linker."""
+    """Intent-aware multi-hop retrieval. Finds seeds via the SeedProvider, resolves a query intent
+    (when an IntentResolver is supplied), runs the shape strategy, and returns a relevance-ranked
+    subgraph. Without an intent resolver it falls back to open-shape bounded BFS (legacy behavior).
+    PPR is a future swap behind _rank()."""
 
     def __init__(
         self,
@@ -136,40 +138,108 @@ class GraphRetriever:
         max_neighbors_per_node: int = 50,
         max_degree: int = 100,
         attribute_relations: frozenset[str] = frozenset(),
+        connective_relations: frozenset[str] = frozenset(),
         top_k_seeds: int = 10,
+        top_k: int = 200,
         seed_provider: SeedProvider | None = None,
+        intent_resolver: object | None = None,
     ):
         self._store = store
         self._max_hops = max_hops
         self._max_triples = max_triples
         self._max_neighbors_per_node = max_neighbors_per_node
         self._max_degree = max_degree
+        self._connective = frozenset(connective_relations)
+        self._top_k = top_k
         self._attribute_nodes = frozenset(
             t.obj for t in store.triples() if t.relation in attribute_relations
         )
+        self._degree = {e: len(store.neighbors(e)) for e in store.entities()}
         self._seed_provider = seed_provider or LexicalSeedProvider(
             store, attribute_relations=attribute_relations, top_k=top_k_seeds
         )
+        self._intent_resolver = intent_resolver
 
     def seeds(self, question: str) -> list[str]:
         return self._seed_provider.seeds(question)
 
     def retrieve(self, question: str) -> RetrievedSubgraph:
         seeds = self.seeds(question)
-        seen_entities: set[str] = set(seeds)
-        seen_triples: set[tuple[str, str, str, str]] = set()
-        collected: list[Triple] = []
+        if not seeds:
+            return RetrievedSubgraph(seeds=(), triples=())
+        intent = self._intent_resolver.resolve(question) if self._intent_resolver else None
+        shape = getattr(intent, "shape", "open")
+        targets = getattr(intent, "target_relations", None)
+        if shape == "entity_lookup":
+            triples = self._entity_lookup(seeds, targets)
+        elif shape == "cluster":
+            triples = self._cluster(seeds, targets)
+        elif shape == "pairwise":
+            triples = self._pairwise(seeds, targets)
+        else:
+            triples = self._open(seeds)
+        ranked = self._rank(triples, set(seeds), targets)
+        return RetrievedSubgraph(seeds=tuple(seeds), triples=tuple(ranked[: self._top_k]))
+
+    def _entity_lookup(self, seeds, targets):
+        out = []
+        for s in seeds:
+            for t in self._store.neighbors(s)[: self._max_neighbors_per_node]:
+                if targets is None or t.relation in targets:
+                    out.append(t)
+        return out
+
+    def _cluster(self, seeds, targets):
+        rels = targets or self._connective
+        out, hubs = [], set()
+        for s in seeds:
+            for t in self._store.neighbors(s):
+                if t.relation in rels:
+                    out.append(t)
+                    hubs.add(t.obj if t.subject == s else t.subject)
+        for hub in hubs:
+            nbrs = self._store.neighbors(hub)
+            if len(nbrs) > self._max_degree:
+                nbrs = nbrs[: self._max_neighbors_per_node]
+            for t in nbrs:
+                if t.relation in rels:
+                    out.append(t)
+        return out
+
+    def _pairwise(self, seeds, targets):
+        if len(seeds) < 2:
+            return self._entity_lookup(seeds, targets)
+        edges, objsets = {}, []
+        for s in seeds:
+            objs = set()
+            for t in self._store.neighbors(s):
+                if targets is None or t.relation in targets:
+                    edges.setdefault(s, []).append(t)
+                    objs.add(t.obj if t.subject == s else t.subject)
+            objsets.append(objs)
+        shared = set.intersection(*objsets) if objsets else set()
+        out = []
+        for s in seeds:
+            for t in edges.get(s, []):
+                if (t.obj if t.subject == s else t.subject) in shared:
+                    out.append(t)
+        return out
+
+    def _open(self, seeds):
+        seen_entities = set(seeds)
+        seen_triples = set()
+        collected = []
         frontier = list(seeds)
         for _ in range(self._max_hops):
             if len(collected) >= self._max_triples:
                 break
-            next_frontier: list[str] = []
+            next_frontier = []
             for ent in frontier:
                 if len(collected) >= self._max_triples:
                     break
                 nbrs = self._store.neighbors(ent)
-                expandable = len(nbrs) <= self._max_degree  # don't traverse through hubs
-                for t in nbrs[: self._max_neighbors_per_node]:  # cap per-node fan-out
+                expandable = len(nbrs) <= self._max_degree
+                for t in nbrs[: self._max_neighbors_per_node]:
                     key = (t.subject, t.relation, t.obj, t.source)
                     if key not in seen_triples:
                         seen_triples.add(key)
@@ -182,4 +252,17 @@ class GraphRetriever:
                                 seen_entities.add(other)
                                 next_frontier.append(other)
             frontier = next_frontier
-        return RetrievedSubgraph(seeds=tuple(seeds), triples=tuple(collected))
+        return collected
+
+    def _rank(self, triples, seedset, targets):
+        def score(t):
+            s = 0.0
+            if targets and t.relation in targets:
+                s += 3.0
+            if t.subject in seedset or t.obj in seedset:
+                s += 2.0
+            deg = max(self._degree.get(t.subject, 1), self._degree.get(t.obj, 1))
+            s += 1.0 / math.log(2 + deg)
+            return s
+
+        return sorted(dict.fromkeys(triples), key=score, reverse=True)
