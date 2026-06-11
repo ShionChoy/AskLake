@@ -41,7 +41,7 @@ tables:
 metrics:
   - name: rating
     expression: title_ratings.averageRating
-    description: Use averageRating for "rating"/"score"; use numVotes for popularity.
+    description: 'Use averageRating for "rating"/"score"; use numVotes for popularity. For "best"/"highest-rated"/"top-rated" ranking questions, add a popularity floor (e.g. AND numVotes >= 25000) unless the user gives their own threshold, so a few high-rating votes do not surface obscure titles.'
 synonyms:
   score: averageRating
   rating: averageRating
@@ -60,7 +60,7 @@ few_shots:
     sql: |
       SELECT b.primaryTitle, r.averageRating
       FROM title_basics b JOIN title_ratings r USING (tconst)
-      WHERE b.genres LIKE '%Sci-Fi%' AND b.startYear > 2010
+      WHERE b.genres LIKE '%Sci-Fi%' AND b.startYear > 2010 AND r.numVotes >= 25000
       ORDER BY r.averageRating DESC
       LIMIT 10
   - question: Most popular movies
