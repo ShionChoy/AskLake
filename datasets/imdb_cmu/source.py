@@ -105,7 +105,7 @@ def build_parquet(
     con.execute(
         f"""
         CREATE TABLE principals AS
-        SELECT tconst, nconst, category, TRY_CAST(ordering AS INTEGER) AS ordering
+        SELECT tconst, nconst, category, TRY_CAST(ordering AS INTEGER) AS ordering, characters
         FROM {csv("title.principals.tsv.gz")}
         WHERE tconst IN (SELECT tconst FROM popular) AND nconst IS NOT NULL
         """
