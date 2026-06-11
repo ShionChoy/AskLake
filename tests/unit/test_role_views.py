@@ -47,3 +47,17 @@ def test_build_is_idempotent():
     build_role_views(b, _policy())  # CREATE OR REPLACE -> no error
     b.run_sql("SET search_path='rls_public'")
     assert b.run_sql("SELECT count(*) FROM title_ratings").rows == [(1,)]
+
+
+def test_predicate_referencing_missing_table_falls_back_to_passthrough():
+    # public predicate on title_basics references main.title_ratings, which is ABSENT here.
+    # build_role_views must not raise at boot: it falls back to a pass-through view.
+    b = DuckDBBackend()
+    b.setup("CREATE TABLE title_basics AS SELECT * FROM (VALUES ('tt1'),('tt2')) v(tconst);")
+    build_role_views(b, Policy(
+        roles=("public",),
+        row_security={"public": {"title_basics":
+            "tconst IN (SELECT tconst FROM main.title_ratings WHERE numVotes >= 25000)"}},
+    ))
+    b.run_sql("SET search_path='rls_public'")
+    assert {r[0] for r in b.run_sql("SELECT tconst FROM title_basics").rows} == {"tt1", "tt2"}
