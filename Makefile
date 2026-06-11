@@ -27,7 +27,9 @@ build-imdb-full:
 	uv run python -c "from datasets.imdb_cmu.source import build_parquet; build_parquet('data/imdb/raw','data/imdb/parquet_full', 0, ('movie','tvSeries','tvMovie'))"
 
 build-graph:
-	ASKLAKE_PARQUET_DIR=$(PARQUET_DIR_APP) GRAPH_FILMS=$(or $(GRAPH_FILMS),2000) uv run python -m scripts.build_graph
+	ASKLAKE_PARQUET_DIR=$(PARQUET_DIR_APP) GRAPH_FILMS=$(or $(GRAPH_FILMS),2000) \
+	GRAPH_MIN_VOTES=$(or $(GRAPH_MIN_VOTES),1000) GRAPH_CAST_CAP=$(or $(GRAPH_CAST_CAP),10) \
+	uv run python -m scripts.build_graph
 
 demo-p2:
 	uv run python demos/demo_p2.py
