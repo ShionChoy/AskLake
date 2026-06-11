@@ -22,8 +22,6 @@ def test_imdb_ontology_declares_attribute_relations():
     ont = load_ontology("datasets/imdb_cmu/graph/ontology.yaml")
     assert set(ont.attribute_relations) == {
         "HAS_GENRE",
-        "IN_LANGUAGE",
-        "FROM_COUNTRY",
         "RELEASED_IN",
         "HAS_THEME",
     }
