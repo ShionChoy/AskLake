@@ -1,0 +1,54 @@
+from fastapi.testclient import TestClient
+
+from api.main import create_app
+from engine.auth.static_token import StaticTokenAuthenticator
+from engine.governance.policy import Policy, PolicyGovernance
+from engine.lakehouse.duckdb_backend import DuckDBBackend
+from engine.ports.auth import Principal
+
+
+def _app():
+    backend = DuckDBBackend()
+    backend.setup(
+        "CREATE TABLE people AS SELECT * FROM (VALUES "
+        "('Nolan', 1970), ('Hidden', 1980)) t(primaryName, birthYear);"
+    )
+    gov = PolicyGovernance(
+        Policy(
+            roles=("analyst", "public"),
+            pii_columns=("birthYear",),
+            mask_roles=("public",),
+            require_limit=True,
+            forbid_writes=True,
+        )
+    )
+    auth = StaticTokenAuthenticator({"tok_a": Principal("alice", "analyst")})
+    return create_app(backend=backend, governance=gov, authenticator=auth)
+
+
+def test_query_with_analyst_token_sees_pii():
+    c = TestClient(_app())
+    out = c.post(
+        "/query",
+        json={"sql": "SELECT primaryName, birthYear FROM people LIMIT 10"},
+        headers={"Authorization": "Bearer tok_a"},
+    ).json()
+    assert ["Nolan", 1970] in out["rows"]
+
+
+def test_query_without_token_is_public_and_masks_pii():
+    c = TestClient(_app())
+    out = c.post(
+        "/query", json={"sql": "SELECT primaryName, birthYear FROM people LIMIT 10"}
+    ).json()
+    assert all(row[1] == "***" for row in out["rows"])  # masked for public
+
+
+def test_self_declared_body_role_is_ignored_security_regression():
+    c = TestClient(_app())
+    # No token, but the body lies and claims analyst -> still public -> still masked.
+    out = c.post(
+        "/query",
+        json={"sql": "SELECT primaryName, birthYear FROM people LIMIT 10", "role": "analyst"},
+    ).json()
+    assert all(row[1] == "***" for row in out["rows"])
