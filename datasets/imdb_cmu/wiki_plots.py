@@ -5,6 +5,7 @@ step. HTTP client is injectable so tests run without network."""
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Iterable
 from urllib.parse import unquote
 
@@ -14,6 +15,29 @@ _SPARQL = "https://query.wikidata.org/sparql"
 _MW_API = "https://en.wikipedia.org/w/api.php"
 _UA = "AskLake/1.0 (educational project; https://github.com/ShionChoy/AskLake)"
 _PLOT_HEADINGS = {"plot", "plot summary", "synopsis", "plot synopsis", "story"}
+
+_TRANSIENT = (httpx.TransportError,)
+_RETRY_STATUS = {429, 500, 502, 503, 504}
+
+
+def _get_with_retry(client, url, params, *, attempts=4, backoff=1.0, sleep=time.sleep):
+    """GET with retry on transient network errors and retryable HTTP status (exponential backoff).
+    Re-raises the last error if every attempt fails. `sleep` is injectable for tests."""
+    last_exc = None
+    for i in range(attempts):
+        try:
+            resp = client.get(url, params=params)
+            resp.raise_for_status()
+            return resp
+        except _TRANSIENT as exc:
+            last_exc = exc
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code not in _RETRY_STATUS:
+                raise
+            last_exc = exc
+        if i < attempts - 1:
+            sleep(backoff * (2**i))
+    raise last_exc
 
 
 def _client(client: httpx.Client | None) -> httpx.Client:
@@ -37,8 +61,13 @@ def resolve_enwiki_titles(
             "?item wdt:P345 ?imdb . "
             "?article schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> . }"
         )
-        resp = c.get(_SPARQL, params={"query": query, "format": "json"})
-        resp.raise_for_status()
+        try:
+            resp = _get_with_retry(c, _SPARQL, {"query": query, "format": "json"})
+        except httpx.HTTPError as exc:  # whole batch failed after retries — skip, keep the rest
+            print(
+                f"[wiki_plots] SPARQL batch failed after retries ({exc}); skipping {len(chunk)} ids"
+            )
+            continue
         for b in resp.json()["results"]["bindings"]:
             tconst = b["imdb"]["value"]
             url = b["article"]["value"]
@@ -71,17 +100,11 @@ def fetch_plot(title: str, *, client: httpx.Client | None = None) -> str | None:
     """Fetch the article's plot-section wikitext via the MediaWiki API and clean it. None if the
     article has no recognizable plot section."""
     c = _client(client)
-    sec = c.get(
+    sec = _get_with_retry(
+        c,
         _MW_API,
-        params={
-            "action": "parse",
-            "page": title,
-            "prop": "sections",
-            "format": "json",
-            "redirects": "1",
-        },
+        {"action": "parse", "page": title, "prop": "sections", "format": "json", "redirects": "1"},
     )
-    sec.raise_for_status()
     index = None
     for s in sec.json().get("parse", {}).get("sections", []):
         if s.get("line", "").strip().lower() in _PLOT_HEADINGS:
@@ -89,9 +112,10 @@ def fetch_plot(title: str, *, client: httpx.Client | None = None) -> str | None:
             break
     if not index:
         return None
-    wt = c.get(
+    wt = _get_with_retry(
+        c,
         _MW_API,
-        params={
+        {
             "action": "parse",
             "page": title,
             "section": index,
@@ -100,7 +124,6 @@ def fetch_plot(title: str, *, client: httpx.Client | None = None) -> str | None:
             "redirects": "1",
         },
     )
-    wt.raise_for_status()
     raw = wt.json().get("parse", {}).get("wikitext", {}).get("*", "")
     cleaned = _strip_wikitext(re.sub(r"^==+.*?==+\s*", "", raw, count=1, flags=re.MULTILINE))
     return cleaned or None

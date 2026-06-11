@@ -15,17 +15,30 @@ class WikiSource(Protocol):
 
 
 class _LiveWiki:
-    """Default WikiSource backed by datasets.imdb_cmu.wiki_plots (live network at build time)."""
+    """Default WikiSource backed by datasets.imdb_cmu.wiki_plots (live network at build time).
+    Reuses one pooled httpx.Client across all calls."""
+
+    def __init__(self):
+        self._client = None
+
+    def _get_client(self):
+        if self._client is None:
+            import httpx
+
+            from datasets.imdb_cmu.wiki_plots import _UA
+
+            self._client = httpx.Client(timeout=30.0, headers={"User-Agent": _UA})
+        return self._client
 
     def resolve(self, tconsts: list[str]) -> dict[str, str]:
         from datasets.imdb_cmu.wiki_plots import resolve_enwiki_titles
 
-        return resolve_enwiki_titles(tconsts)
+        return resolve_enwiki_titles(tconsts, client=self._get_client())
 
     def plot(self, title: str) -> str | None:
         from datasets.imdb_cmu.wiki_plots import fetch_plot
 
-        return fetch_plot(title)
+        return fetch_plot(title, client=self._get_client())
 
 
 def select_plot_docs(
@@ -42,11 +55,18 @@ def select_plot_docs(
     ranked = [(tconst, title) for tconst, title in res.rows]
     titles = wiki.resolve([t for t, _ in ranked])
     docs: list[PlotDoc] = []
+    failed = 0
     for tconst, primary_title in ranked:
         art = titles.get(tconst)
         if not art:
             continue
-        text = wiki.plot(art)
+        try:
+            text = wiki.plot(art)
+        except Exception:  # noqa: BLE001 - one film's network error must not abort the batch
+            failed += 1
+            continue
         if text:
             docs.append(PlotDoc(id=f"wiki:{tconst}", title=primary_title, text=text))
+    if failed:
+        print(f"[graph_corpus] skipped {failed} film(s) after fetch errors")
     return docs

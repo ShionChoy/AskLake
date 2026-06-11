@@ -1,3 +1,5 @@
+import httpx
+
 from datasets.imdb_cmu.wiki_plots import _extract_plot_section, fetch_plot, resolve_enwiki_titles
 
 
@@ -63,3 +65,38 @@ def test_fetch_plot_returns_cleaned_section():
     client = _FakeClient([sections, secwt])
     text = fetch_plot("The Matrix", client=client)
     assert "red pill" in text and "<ref>" not in text
+
+
+class _FlakyClient:
+    """Raises ConnectError for the first `fail_times` calls, then returns the payload."""
+
+    def __init__(self, fail_times, payload):
+        self.fail_times = fail_times
+        self.payload = payload
+        self.calls = 0
+
+    def get(self, url, params=None, **kw):
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            raise httpx.ConnectError("boom")
+        return _FakeResp(self.payload)
+
+
+def test_get_with_retry_recovers_from_transient():
+    from datasets.imdb_cmu.wiki_plots import _get_with_retry
+
+    c = _FlakyClient(fail_times=2, payload={"ok": 1})
+    resp = _get_with_retry(c, "http://x", None, sleep=lambda *_a: None)
+    assert resp.json() == {"ok": 1}
+    assert c.calls == 3  # 2 failures + 1 success
+
+
+def test_get_with_retry_gives_up_after_attempts():
+    import pytest
+
+    from datasets.imdb_cmu.wiki_plots import _get_with_retry
+
+    c = _FlakyClient(fail_times=99, payload={"ok": 1})
+    with pytest.raises(httpx.ConnectError):
+        _get_with_retry(c, "http://x", None, attempts=4, sleep=lambda *_a: None)
+    assert c.calls == 4

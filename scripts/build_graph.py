@@ -9,6 +9,7 @@ Env: ASKLAKE_PARQUET_DIR, ASKLAKE_GRAPH_PATH, GRAPH_FILMS (default 2000),
 from __future__ import annotations
 
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
 from pathlib import Path
@@ -57,6 +58,19 @@ def build_and_save(
     return count
 
 
+def _extract_with_retry(llm, doc, ontology, attempts=3, backoff=1.0):
+    """Extract one doc's triples, retrying transient LLM errors; returns None if every attempt
+    fails (so the build skips that film's themes instead of aborting the whole run)."""
+    for i in range(attempts):
+        try:
+            return extract_triples(llm, doc, ontology)
+        except Exception:  # noqa: BLE001 - one film's LLM error must not abort the batch
+            if i == attempts - 1:
+                return None
+            time.sleep(backoff * (2**i))
+    return None
+
+
 def build_and_save_parallel(structured, docs, llm, ontology, out_path, workers=12, max_calls=None):
     """Write the deterministic `structured` triples first, then extract themes from `docs` with a
     bounded thread-pool fan-out (one LLM call per doc), appending as each completes. Returns the
@@ -67,14 +81,24 @@ def build_and_save_parallel(structured, docs, llm, ontology, out_path, workers=1
 
     def _stream():
         done = 0
+        failed = 0
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            futures = {ex.submit(extract_triples, llm, d, ontology): d for d in docs}
+            futures = {ex.submit(_extract_with_retry, llm, d, ontology): d for d in docs}
             for fut in as_completed(futures):
                 done += 1
                 doc = futures[fut]
                 triples = fut.result()
+                if triples is None:
+                    failed += 1
+                    print(
+                        f"  [{done}/{len(docs)}] {doc.title}: FAILED after retries (skipped)",
+                        flush=True,
+                    )
+                    continue
                 print(f"  [{done}/{len(docs)}] {doc.title}: {len(triples)} triple(s)", flush=True)
                 yield from triples
+        if failed:
+            print(f"[build_graph] {failed} film(s) skipped after extraction errors", flush=True)
 
     return append_triples(_stream(), out_path)
 

@@ -75,3 +75,26 @@ def test_theme_extraction_drops_structured_relations():
     doc = PlotDoc(id="wiki:tt1", title="X", text="...")
     rels = {t.relation for t in extract_triples(llm, doc, restricted)}
     assert rels == {"HAS_THEME", "SET_IN"}  # DIRECTED_BY filtered out by restricted ontology
+
+
+def test_build_parallel_skips_film_on_extraction_error(tmp_path, monkeypatch):
+    import json
+
+    import scripts.build_graph as bg
+    from engine.graph.extraction import PlotDoc
+    from engine.graph.ontology import GraphOntology
+
+    monkeypatch.setattr(bg.time, "sleep", lambda *_a, **_k: None)  # no real backoff in tests
+
+    class _FlakyLLM:
+        def complete(self, prompt, system=None):
+            if "BOOM" in prompt:
+                raise RuntimeError("llm down")
+            return "X | HAS_THEME | chaos\n"
+
+    ont = GraphOntology(relation_types=("HAS_THEME",))
+    docs = [PlotDoc("wiki:tt1", "Good", "ok"), PlotDoc("wiki:tt2", "Bad", "BOOM plot")]
+    out = tmp_path / "g.jsonl"
+    count = bg.build_and_save_parallel([], docs, _FlakyLLM(), ont, str(out), workers=2)
+    rels = [json.loads(line)["relation"] for line in out.read_text().splitlines() if line.strip()]
+    assert count == 1 and rels == ["HAS_THEME"]  # good film written, bad film skipped, no abort

@@ -39,3 +39,17 @@ def test_select_plot_docs_skips_films_without_plot(tmp_path):
 
     docs = select_plot_docs(_fixture_parquet(tmp_path / "pq"), max_films=10, wiki=_Partial())
     assert {d.title for d in docs} == {"The Matrix"}  # Inception had no plot
+
+
+def test_select_plot_docs_skips_film_on_fetch_error(tmp_path):
+    import httpx
+
+    class _RaisingWiki(_FakeWiki):
+        def plot(self, title):
+            if title == "Inception":
+                raise httpx.ConnectError("boom")  # transient error after retries
+            return "Neo learns the truth."
+
+    docs = select_plot_docs(_fixture_parquet(tmp_path / "pq"), max_films=10, wiki=_RaisingWiki())
+    titles = {d.title for d in docs}
+    assert titles == {"The Matrix"}  # Inception skipped, build did not abort
