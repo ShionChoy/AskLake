@@ -33,7 +33,9 @@ class Policy:
     mask_roles: tuple[str, ...] = ()  # roles whose PII columns are masked
     row_filters: dict[str, tuple[RowFilter, ...]] = field(default_factory=dict)  # role -> filters
     roles: tuple[str, ...] = ()
-    row_security: dict[str, dict[str, str]] = field(default_factory=dict)  # role -> {table: predicate}
+    row_security: dict[str, dict[str, str]] = field(
+        default_factory=dict
+    )  # role -> {table: predicate}
     require_limit: bool = False
     forbid_writes: bool = True
 

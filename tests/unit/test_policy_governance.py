@@ -1,6 +1,12 @@
 import pytest
 
-from engine.governance.policy import GovernanceError, Policy, PolicyGovernance, RowFilter, load_policy
+from engine.governance.policy import (
+    GovernanceError,
+    Policy,
+    PolicyGovernance,
+    RowFilter,
+    load_policy,
+)
 from engine.ports.governance import GovernanceHook
 from engine.ports.storage import QueryResult
 
@@ -66,7 +72,7 @@ def test_load_policy_reads_roles_and_row_security(tmp_path):
         "pii_columns: [birthYear]\n"
         "row_security:\n"
         "  public:\n"
-        "    title_ratings: \"numVotes >= 25000\"\n"
+        '    title_ratings: "numVotes >= 25000"\n'
         "cost_guardrail: {require_limit: true, forbid_writes: true}\n"
     )
     pol = load_policy(p)
