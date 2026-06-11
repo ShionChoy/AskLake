@@ -23,8 +23,7 @@ def test_imdb_ontology_declares_attribute_relations():
     assert set(ont.attribute_relations) == {
         "HAS_GENRE",
         "RELEASED_IN",
-        "HAS_THEME",
-    }
+    }  # HAS_THEME moved to connective_relations
 
 
 def test_empty_graph_hint_default_empty():

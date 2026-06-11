@@ -32,3 +32,20 @@ def test_imdb_ontology_drops_language_and_country():
         "HAS_THEME",
     ):
         assert rel in o.relation_types
+
+
+def test_ontology_parses_node_roles_and_intents():
+    from engine.graph.ontology import load_ontology
+
+    o = load_ontology("datasets/imdb_cmu/graph/ontology.yaml")
+    assert "HAS_THEME" in o.connective_relations
+    assert "HAS_THEME" not in o.attribute_relations  # moved to connective in PR2
+    assert "ACTED_IN" in o.entity_relations and "DIRECTED_BY" in o.entity_relations
+    names = {i.name: i for i in o.intents}
+    assert {"cast", "director", "themes", "connection"} <= set(names)
+    cast = names["cast"]
+    assert cast.shape == "entity_lookup"
+    assert "ACTED_IN" in cast.target_relations
+    assert "actor" in cast.triggers
+    assert names["themes"].shape == "cluster"
+    assert names["connection"].shape == "pairwise"
