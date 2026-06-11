@@ -8,7 +8,8 @@ table plus graph themes with traceable plot citations."""
 from __future__ import annotations
 
 from engine.graph.extraction import PlotDoc, build_graph
-from engine.graph.ontology import GraphOntology
+from engine.graph.intent import IntentResolver
+from engine.graph.ontology import GraphOntology, Intent
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 from engine.llm.fake import FakeLLMProvider
 from engine.retrieval.graph_rag_path import GraphRagPath
@@ -29,9 +30,24 @@ _FILM_SQL = (
 
 # --- unstructured side: synthetic plot blurbs (NOT raw CMU) for the hermetic extraction ---------
 _ONTOLOGY = GraphOntology(
-    entity_types=("Film", "Person", "Theme"),
-    relation_types=("HAS_THEME", "DIRECTED_BY"),
-    hint="Extract the director and the central themes.",
+    entity_types=("Film", "Person", "Theme", "Character"),
+    relation_types=("HAS_THEME", "DIRECTED_BY", "ACTED_IN", "FEATURES_CHARACTER"),
+    connective_relations=("HAS_THEME",),
+    hint="Extract the director, cast, characters, and the central themes.",
+    intents=(
+        Intent(
+            "cast",
+            frozenset({"actors", "acted", "cast"}),
+            frozenset({"ACTED_IN", "FEATURES_CHARACTER"}),
+            "entity_lookup",
+        ),
+        Intent(
+            "themes",
+            frozenset({"themes", "theme"}),
+            frozenset({"HAS_THEME"}),
+            "cluster",
+        ),
+    ),
 )
 _DOCS = [
     PlotDoc("plot_inception", "Inception", "A thief who steals secrets from dreams..."),
@@ -44,11 +60,15 @@ _EXTRACTION = [
         "Inception | DIRECTED_BY | Christopher Nolan\n"
         "Inception | HAS_THEME | dreams\n"
         "Inception | HAS_THEME | identity\n"
+        "Inception | ACTED_IN | Leonardo DiCaprio\n"
+        "Inception | FEATURES_CHARACTER | Cobb\n"
     ),
     (
         "The Dark Knight | DIRECTED_BY | Christopher Nolan\n"
         "The Dark Knight | HAS_THEME | chaos\n"
         "The Dark Knight | HAS_THEME | identity\n"
+        "The Dark Knight | ACTED_IN | Christian Bale\n"
+        "The Dark Knight | FEATURES_CHARACTER | Bruce Wayne\n"
     ),
 ]
 
@@ -59,17 +79,24 @@ _FUSION_QUESTION = (
 )
 
 
-def _build_router() -> Router:
+def _build_router() -> tuple[Router, GraphRagPath]:
     backend = DuckDBBackend()
     backend.setup(SEED)
     sql_path = SqlPath(FakeLLMProvider(responses=[_FILM_SQL]), RawSchemaProvider(backend), backend)
     store = build_graph(FakeLLMProvider(responses=_EXTRACTION), _DOCS, _ONTOLOGY)
+    # Untyped graph path for the router: uses open BFS so multi-hop director→film→theme fusion works
     graph_path = GraphRagPath(store)
-    return Router(sql_path, graph_path, entity_vocab=store.entities())
+    # Typed graph path for the typed-retrieval showcase: intent resolver narrows relation sets
+    typed_graph_path = GraphRagPath(
+        store,
+        connective_relations=frozenset({"HAS_THEME"}),
+        intent_resolver=IntentResolver(_ONTOLOGY),
+    )
+    return Router(sql_path, graph_path, entity_vocab=store.entities()), typed_graph_path
 
 
 def run_demo_p4() -> dict:
-    router = _build_router()
+    router, typed_gp = _build_router()
 
     def decide(q: str) -> str:
         d = router.route(q)
@@ -86,7 +113,18 @@ def run_demo_p4() -> dict:
         "sql_rows": [list(r) for r in rr.result.rows] if rr.result else None,
         "narrative": rr.narrative,
     }
-    return {"routes": routes, "fused": fused}
+
+    # Typed retrieval showcase: cast vs theme questions return different relation sets
+    def rels(q: str) -> list[str]:
+        res = typed_gp.run(q)
+        return sorted({r[1] for r in res.result.rows}) if res.result else []
+
+    typed = {
+        "cast_q": rels("who acted in Inception"),
+        "theme_q": rels("themes in Inception"),
+    }
+
+    return {"routes": routes, "fused": fused, "typed": typed}
 
 
 if __name__ == "__main__":
@@ -96,4 +134,5 @@ if __name__ == "__main__":
     print("fused SQL rows:", out["fused"]["sql_rows"])
     print("fused narrative:")
     print(out["fused"]["narrative"])
+    print("typed cast vs themes:", out["typed"])
     print("demo-p4 OK")
