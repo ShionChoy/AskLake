@@ -52,3 +52,16 @@ def test_self_declared_body_role_is_ignored_security_regression():
         json={"sql": "SELECT primaryName, birthYear FROM people LIMIT 10", "role": "analyst"},
     ).json()
     assert all(row[1] == "***" for row in out["rows"])
+
+
+def test_ask_does_not_cache_lazy_path_across_roles():
+    # With no injected sql_path and no key, /ask must not pin app.state.sql_path to a role.
+    # We assert the app never caches a lazily-built path (so each request rebuilds per-role).
+    import inspect
+
+    from api import main
+
+    src = inspect.getsource(main.create_app)
+    # the /ask lazy block must NOT assign app.state.sql_path (that would pin the first role)
+    ask_src = src[src.index("def ask(") :]
+    assert "app.state.sql_path = sp" not in ask_src

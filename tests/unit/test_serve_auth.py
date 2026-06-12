@@ -42,3 +42,11 @@ def test_analyst_token_sees_full_catalog(monkeypatch, tmp_path):
         "/ask_trace", json={"question": "all films"}, headers={"Authorization": "Bearer tok_a"}
     ).json()
     assert {r[0] for r in out["rows"]} == {"tt1", "tt2"}
+
+
+def test_build_app_raises_when_auth_role_not_in_governance(monkeypatch, tmp_path):
+    bad = tmp_path / "auth.yaml"
+    bad.write_text("tokens:\n  tok: {user: x, role: superadmin}\n")
+    monkeypatch.setattr("api.serve.AUTH_CONFIG", str(bad))
+    with pytest.raises(ValueError, match="auth.yaml roles not in governance.yaml"):
+        build_app(backend=_backend())

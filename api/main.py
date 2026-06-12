@@ -67,7 +67,7 @@ def create_app(
                 result = governance.after_result(result, role=role)
             except Exception as exc:  # noqa: BLE001
                 observability.event("query_error", error=str(exc))
-                app.state.observability.event(f"access.{role}.blocked")
+                observability.event(f"access.{role}.blocked")
                 app.state.audit.write(
                     user=principal.user,
                     role=role,
@@ -77,7 +77,7 @@ def create_app(
                     question=req.sql,
                 )
                 return JSONResponse(status_code=400, content={"error": str(exc)})
-        app.state.observability.event(f"access.{role}.allowed")
+        observability.event(f"access.{role}.allowed")
         app.state.audit.write(
             user=principal.user,
             role=role,
@@ -98,11 +98,11 @@ def create_app(
             from engine.semantic.raw_schema import RawSchemaProvider
 
             llm = AnthropicProvider(model=settings.llm_model)
+            # Build per-request: role is per-caller, so caching would pin the first caller's role.
             sp = SqlPath(llm, RawSchemaProvider(backend), backend, governance, role=role)
-            app.state.sql_path = sp
         with observability.span("ask", role=role):
             rr = sp.run(req.question)
-        app.state.observability.event(f"access.{role}.allowed")
+        observability.event(f"access.{role}.allowed")
         app.state.audit.write(
             user=principal.user,
             role=role,

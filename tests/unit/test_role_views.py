@@ -68,3 +68,27 @@ def test_predicate_referencing_missing_table_falls_back_to_passthrough():
     )
     b.run_sql("SET search_path='rls_public'")
     assert {r[0] for r in b.run_sql("SELECT tconst FROM title_basics").rows} == {"tt1", "tt2"}
+
+
+def test_passthrough_fallback_still_masks_pii():
+    # When a predicate can't bind (references an absent table) the view falls back to
+    # pass-through, but PII redaction (NULL) must STILL apply.
+    b = DuckDBBackend()
+    b.setup(
+        "CREATE TABLE name_basics AS SELECT * FROM (VALUES "
+        "('nm1','Nolan',1970)) v(nconst, primaryName, birthYear);"
+    )
+    build_role_views(
+        b,
+        Policy(
+            roles=("public",),
+            pii_columns=("birthYear",),
+            mask_roles=("public",),
+            row_security={
+                "public": {"name_basics": "nconst IN (SELECT nconst FROM main.title_principals)"}
+            },  # title_principals ABSENT
+        ),
+    )
+    b.run_sql("SET search_path='rls_public'")
+    # birthYear must be NULL (masked) even though the row predicate fell back to pass-through
+    assert b.run_sql("SELECT birthYear FROM name_basics").rows == [(None,)]

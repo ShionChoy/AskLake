@@ -140,6 +140,7 @@ def _sidebar() -> None:
             "Empty = public (restricted) view."
         ),
     )
+    st.sidebar.caption("Access tokens are not saved locally.")
 
     st.sidebar.markdown("---")
     path_choice = st.sidebar.selectbox(
