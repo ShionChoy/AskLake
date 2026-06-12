@@ -1,4 +1,4 @@
-.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6 eval eval-real build-imdb build-imdb-full build-graph build-crm eval-real-crm serve ui clean
+.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6 demo-p7 eval eval-real build-imdb build-imdb-full build-graph build-crm eval-real-crm serve ui clean
 
 PARQUET_DIR_APP := $(if $(wildcard data/imdb/parquet_full),data/imdb/parquet_full,data/imdb/parquet)
 
@@ -12,7 +12,7 @@ lint:
 test:
 	uv run pytest
 
-demo: demo-p0 demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6
+demo: demo-p0 demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6 demo-p7
 
 demo-p0:
 	uv run python demos/demo_p0.py
@@ -45,6 +45,9 @@ demo-p5:
 
 demo-p6:
 	uv run python demos/demo_p6.py
+
+demo-p7:
+	uv run python -m demos.demo_p7
 
 eval:
 	uv run python -m eval.run
