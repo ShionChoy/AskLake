@@ -16,14 +16,20 @@ import os
 import time
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
+from api.deps import require_principal
 from api.main import create_app
+from engine.auth.static_token import StaticTokenAuthenticator
+from engine.governance.policy import PolicyGovernance, load_policy
+from engine.governance.views import build_role_views
 from engine.graph.intent import IntentResolver
 from engine.graph.ontology import load_ontology
 from engine.graph.persistence import load_store
 from engine.lakehouse.duckdb_backend import DuckDBBackend
+from engine.lakehouse.role_scoped_backend import RoleScopedBackend
 from engine.llm.factory import make_provider
+from engine.ports.auth import Principal
 from engine.ports.llm import LLMProvider
 from engine.ports.storage import QueryResult, StorageBackend
 from engine.retrieval.agentic_sql_path import AgenticSqlPath
@@ -39,6 +45,8 @@ PARQUET_DIR = os.environ.get("ASKLAKE_PARQUET_DIR", "data/imdb/parquet")
 SEMANTIC_YAML = "datasets/imdb_cmu/semantic.yaml"
 GRAPH_PATH = os.environ.get("ASKLAKE_GRAPH_PATH", "data/imdb/graph/triples.jsonl")
 ONTOLOGY_YAML = "datasets/imdb_cmu/graph/ontology.yaml"
+GOVERNANCE_YAML = "datasets/imdb_cmu/governance.yaml"
+AUTH_CONFIG = os.environ.get("ASKLAKE_AUTH_CONFIG", "auth.yaml")
 
 
 def apply_duckdb_guardrails(
@@ -214,22 +222,74 @@ def build_app(
         except Exception as exc:  # noqa: BLE001 - degrade to no value hints
             print(f"[api.serve] value index unavailable ({exc}); continuing without value-linking")
 
-    def _make_path(provider_llm: LLMProvider):
+    policy = load_policy(GOVERNANCE_YAML)
+    governance = PolicyGovernance(policy)
+    build_role_views(backend, policy)  # rls_<role> schemas of filtered/redacted views
+
+    # Paths generate SQL via LLM; forbid writes but don't require LIMIT (the memory guardrail
+    # and view-level RLS already protect the engine). LIMIT enforcement stays on /query (raw SQL).
+    from engine.governance.policy import Policy as _Policy  # noqa: PLC0415
+
+    path_governance = PolicyGovernance(
+        _Policy(
+            pii_columns=policy.pii_columns,
+            mask_roles=policy.mask_roles,
+            row_filters=policy.row_filters,
+            roles=policy.roles,
+            row_security=policy.row_security,
+            require_limit=False,
+            forbid_writes=policy.forbid_writes,
+        )
+    )
+
+    authenticator = (
+        StaticTokenAuthenticator.from_yaml(AUTH_CONFIG)
+        if AUTH_CONFIG and Path(AUTH_CONFIG).exists()
+        else StaticTokenAuthenticator({})
+    )
+    unknown = authenticator.roles - set(policy.roles)
+    if unknown:
+        raise ValueError(f"auth.yaml roles not in governance.yaml: {sorted(unknown)}")
+
+    def _make_path(provider_llm: LLMProvider, role: str):
         tllm = _TracingLLM(provider_llm, log)
+        rbackend = _TracingBackend(RoleScopedBackend(backend, role), log)
         if agent_kind == "grounded":
             return GroundedSqlPath(
-                tllm, tschema, tbackend, value_index=value_index, k_candidates=3, max_retries=2
+                tllm,
+                tschema,
+                rbackend,
+                governance=path_governance,
+                role=role,
+                value_index=value_index,
+                k_candidates=3,
+                max_retries=2,
             )
-        return AgenticSqlPath(tllm, tschema, tbackend, max_retries=2)
+        return AgenticSqlPath(
+            tllm, tschema, rbackend, governance=path_governance, role=role, max_retries=2
+        )
 
     def _model_of(provider_llm: LLMProvider) -> str:
         return getattr(provider_llm, "_model", None) or type(provider_llm).__name__
 
-    default_path = _make_path(default_llm) if default_llm is not None else None
+    _default_paths: dict[str, object] = {}
+
+    def _default_path_for(role: str):
+        if default_llm is None:
+            return None
+        if role not in _default_paths:
+            _default_paths[role] = _make_path(default_llm, role)
+        return _default_paths[role]
+
     default_model = _model_of(default_llm) if default_llm is not None else None
     default_provider = type(default_llm).__name__ if default_llm is not None else None
 
-    app = create_app(backend=tbackend, sql_path=default_path)
+    app = create_app(
+        backend=tbackend,
+        governance=governance,
+        sql_path=_default_path_for("public"),
+        authenticator=authenticator,
+    )
     app.state.trace_log = log
     app.state.model_name = default_model
     app.state.provider_name = default_provider
@@ -276,7 +336,7 @@ def build_app(
     # default_path (which may be None when there is no boot key) is safe. Execution below uses
     # the per-request sql_runner from _resolve(), so a BYO key is honoured, not default_path.
     router = Router(
-        default_path,
+        _default_path_for("public"),
         graph_path,
         synth,
         entity_vocab=graph_store.entities() if graph_store is not None else (),
@@ -294,7 +354,7 @@ def build_app(
         d = router.route(question)
         return d.paths, d.fuse
 
-    def _resolve(provider: str, model: str, api_key: str):
+    def _resolve(provider: str, model: str, api_key: str, role: str):
         """Return (path, effective_model) for this request, or (None, None) when no key is usable.
 
         A typed key => build a per-request provider (BYO). Otherwise fall back to the boot-time
@@ -303,9 +363,10 @@ def build_app(
         `api_key` is what distinguishes "bring your own" from "use the server default".)"""
         if api_key:
             req_llm = make_provider(provider or None, api_key=api_key or None, model=model or None)
-            return _make_path(req_llm), _model_of(req_llm)
-        if default_path is not None:
-            return default_path, default_model
+            return _make_path(req_llm, role), _model_of(req_llm)
+        dp = _default_path_for(role)
+        if dp is not None:
+            return dp, default_model
         return None, None
 
     def _empty(narrative: str, model: str = "") -> dict:
@@ -334,7 +395,8 @@ def build_app(
         }
 
     @app.post("/ask_trace")
-    def ask_trace(payload: dict) -> dict:
+    def ask_trace(payload: dict, principal: Principal = Depends(require_principal)) -> dict:  # noqa: B008
+        role = principal.role
         question = payload.get("question", "")
         api_key = (payload.get("api_key", "") or "").strip()
         requested = (payload.get("path") or "auto").lower()
@@ -361,7 +423,7 @@ def build_app(
         if needs_sql:
             try:
                 sql_runner, model = _resolve(
-                    payload.get("provider", ""), payload.get("model", ""), api_key
+                    payload.get("provider", ""), payload.get("model", ""), api_key, role
                 )
             except Exception as exc:  # noqa: BLE001
                 return _empty(
@@ -397,6 +459,15 @@ def build_app(
                 "elapsed_ms": round((time.perf_counter() - t0) * 1000, 1),
             }
         elapsed = (time.perf_counter() - t0) * 1000
+        app.state.observability.event(f"access.{role}.allowed")
+        app.state.audit.write(
+            user=principal.user,
+            role=role,
+            path=rr.path,
+            decision="allowed",
+            row_count=len(rr.result.rows) if rr.result else 0,
+            question=question,
+        )
         return {
             "path": rr.path,
             "sql": rr.sql,
