@@ -32,13 +32,21 @@ def _creds_payload(state) -> dict:
     return out
 
 
+def _auth_headers(state) -> dict:
+    """Build the Authorization header from a stored access token (separate from the LLM key)."""
+    token = state.get("access_token", "")
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 def _ask_body(question: str, state) -> dict:
     """Build the /ask_trace request body: question + retrieval path + (non-empty) credentials."""
     return {"question": question, "path": state.get("path", "auto"), **_creds_payload(state)}
 
 
 def _post(path: str, payload: dict) -> dict:
-    return requests.post(f"{API_URL}{path}", json=payload, timeout=120).json()
+    return requests.post(
+        f"{API_URL}{path}", json=payload, headers=_auth_headers(st.session_state), timeout=120
+    ).json()
 
 
 @st.cache_data(ttl=30)
@@ -53,7 +61,12 @@ def _ask(question: str) -> dict:
     """Prefer the traced endpoint (rich steps + BYO credentials + routing); fall back to /ask."""
     body = _ask_body(question, st.session_state)
     try:
-        r = requests.post(f"{API_URL}/ask_trace", json=body, timeout=180)
+        r = requests.post(
+            f"{API_URL}/ask_trace",
+            json=body,
+            headers=_auth_headers(st.session_state),
+            timeout=180,
+        )
         if r.status_code == 200:
             return r.json()
     except Exception:  # noqa: BLE001
@@ -73,6 +86,7 @@ def _init_state() -> None:
     st.session_state.provider = saved.get("provider", "deepseek")
     st.session_state.model = saved.get("model", DEFAULT_MODELS["deepseek"][0])
     st.session_state.api_key = saved.get("api_key", "")
+    st.session_state.access_token = saved.get("access_token", "")
     st.session_state.creds_loaded = True
 
 
@@ -115,6 +129,17 @@ def _sidebar() -> None:
         st.sidebar.caption("🔐 A key is saved on this machine (plaintext, ~/.config/asklake/).")
     else:
         st.sidebar.caption("No saved key. A pasted key is sent per request and not stored.")
+
+    st.sidebar.markdown("---")
+    st.session_state.access_token = st.sidebar.text_input(
+        "Access token",
+        type="password",
+        value=st.session_state.get("access_token", ""),
+        help=(
+            "Bearer token for role-based access (separate from the LLM API key). "
+            "Empty = public (restricted) view."
+        ),
+    )
 
     st.sidebar.markdown("---")
     path_choice = st.sidebar.selectbox(
