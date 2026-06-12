@@ -21,7 +21,9 @@ def build_role_views(backend: StorageBackend, policy: Policy) -> None:
         rs = policy.row_security.get(role, {})
         for t in tables:
             select_list = ", ".join(
-                f'NULL AS "{c.name}"' if (masked and c.name in policy.pii_columns) else f'"{c.name}"'
+                f'NULL AS "{c.name}"'
+                if (masked and c.name in policy.pii_columns)
+                else f'"{c.name}"'
                 for c in t.columns
             )
             base = (
