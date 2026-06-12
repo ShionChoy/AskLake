@@ -14,6 +14,7 @@ AskLake answers plain-English questions through two grounded retrieval paths —
 - **Interactive network view** — graph and fusion answers also render their triples as a draggable, zoomable pyvis network (relation-labeled edges, hubs sized by degree, source citations on hover) in a 🕸️ Network view expander beneath the table. Adjustable in-app: node size, layout spacing/density, and a freeze-layout toggle.
 - **Heuristic Router + Synthesizer** — routes structured questions to SQL, relational/narrative questions to the graph, and fuses both for cross-cutting queries.
 - **Governance hook** — RBAC, PII masking (`birthYear`/`deathYear` masked for `public` role), row-level filters (adult titles hidden), and query-cost guardrails (blocks unbounded scans and non-SELECT writes).
+- **Authenticated role-based access** — Bearer-token authentication; token→role mapping in `auth.yaml`; missing or invalid token degrades gracefully to the least-privilege `public` role (never a hard error). See *Access control & governance* below.
 - **Observability** — `PrometheusObservability` records LLM-call latency, SQL errors, and storage spans; opt-in via `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` which also exposes a `/metrics` endpoint.
 - **Bring-your-own key in the browser** — paste an API key and pick the provider/model right in the UI sidebar, then optionally save it to a local `0600` file for next time (or delete it). Credentials are sent per request and **never persisted server-side**; the server boots fine with no key at all.
 - **Port-and-adapter engine** — 7 ports (`LLMProvider`, `StorageBackend`, `SchemaProvider`, `RetrievalPath`, `AgentGraph` nodes, `GovernanceHook`, `Observability`) keep every component swappable without touching existing adapters.
@@ -121,6 +122,30 @@ The simpler self-correct-only path (`AgenticSqlPath`: **SQLWriter → Validator 
 
 A heuristic Router scores SQL-vs-graph features and dispatches to `SqlPath`, `GraphRagPath`, or fuses both. A `Synthesizer` concatenates the SQL table with the graph narrative. Structured aggregation/filter questions route to SQL; plot/theme questions route to the graph; cross-cutting questions trigger fusion. All three components sit behind ports and can be replaced with LLM-backed implementations.
 
+### Access control & governance
+
+**Authentication** — the API accepts a `Bearer <token>` header on every request. Tokens map to
+roles via `auth.yaml` (copy from `auth.example.yaml`, add `ASKLAKE_AUTH_CONFIG=auth.yaml` to
+`.env`). A missing or invalid token degrades silently to the least-privilege `public` role — it
+never returns a 401 for anonymous callers. The Streamlit sidebar exposes a password-masked
+**Access token** field (separate from the LLM API key).
+
+**Row-level security on the NL query path** — `public` callers see only the popular catalog
+(`numVotes >= 25000` on `title_ratings`); `analyst` callers see the full long-tail catalog. This
+is enforced via per-role DuckDB views (`rls_<role>`) selected per request — the role name never
+enters the LLM prompt. PII columns (`birthYear`, `deathYear`) are masked to `NULL` for the
+`public` role.
+
+**Raw SQL console** (`/query`) — read-only (all writes blocked) and LIMIT-required for every role;
+PII masking by role applies; the popular-catalog row filter (`numVotes >= 25000`) is a property of
+the NL path (`/ask_trace`), not the raw SQL console.
+
+**Audit** — a structured log line per query (timestamp / principal / role / path / decision) plus
+role×decision counters via the observability layer.
+
+**Deferred seams** — JWT/login UI, table-level RBAC, persistent audit store, graph-path
+governance.
+
 ---
 
 ## Evaluation
@@ -164,12 +189,13 @@ Reproduce: `make build-imdb MIN_VOTES=25 && make eval-real` (IMDb) and `make bui
 ### Hermetic demos (no API key, no data download)
 
 ```bash
-make demo        # runs demo-p0 through demo-p5 in sequence
+make demo        # runs demo-p0 through demo-p7 in sequence
 make demo-p0     # DuckDB smoke test
 make demo-p2     # agentic self-correction (rating → averageRating)
 make demo-p3     # governance: analyst vs public role, cost guardrail
 make demo-p4     # GraphRAG + Router fusion (Nolan films + plot themes)
 make demo-p5     # observability: instrumented self-correction + /metrics excerpt
+make demo-p7     # authenticated RBAC: row-level security + PII masking by role
 ```
 
 ### Tests and lint
@@ -181,7 +207,7 @@ make lint        # ruff check + ruff format --check
 
 ### CI
 
-CI runs all demos (`p0`→`p5`), the full test suite, and a Docker image build on every push — no prior demo regresses.
+CI runs all demos (`p0`→`p7`), the full test suite, and a Docker image build on every push — no prior demo regresses.
 
 ### Clean up
 
@@ -198,6 +224,7 @@ make clean       # removes build artifacts and temporary files
 | `DEEPSEEK_API_KEY` | DeepSeek auth (default provider) |
 | `ANTHROPIC_API_KEY` + `ASKLAKE_LLM_PROVIDER=anthropic` | use Claude instead of DeepSeek |
 | `ASKLAKE_PARQUET_DIR` | built parquet location (default `data/imdb/parquet`) |
+| `ASKLAKE_AUTH_CONFIG` | path to `auth.yaml` token→role map; unset = all requests degrade to `public` |
 | `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` | enable `/metrics` Prometheus exposition |
 | `ASKLAKE_API_PORT` | API port (default `8000`) |
 | `ASKLAKE_API_URL` | URL the UI calls (default `http://localhost:8000`) |
@@ -236,7 +263,7 @@ api/             # FastAPI app (/ask, /query, /info, /ask_trace, /metrics)
 ui/              # Streamlit front-end
 datasets/        # per-dataset config (semantic.yaml, governance.yaml, graph ontology, connector)
 eval/            # eval harness + IMDb gold set (eval/imdb_gold.py)
-demos/           # hermetic demo scripts (demo-p0 through demo-p5)
+demos/           # hermetic demo scripts (demo-p0 through demo-p7)
 infra/           # Prometheus + Grafana provisioning (observability profile)
 tests/           # unit + integration tests
 ```

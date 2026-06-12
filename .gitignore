@@ -10,6 +10,7 @@ CLAUDE.md
 *.pem
 secrets/
 .secrets/
+/auth.yaml
 
 # ─── Raw / downloaded datasets & data-store volumes (never commit) ───
 /data/

@@ -31,10 +31,12 @@ def test_ask_body_defaults_path_to_auto():
 
 def test_auth_headers_builds_bearer_when_token_present():
     import ui.app as app
+
     assert app._auth_headers({"access_token": "tok_a"}) == {"Authorization": "Bearer tok_a"}
 
 
 def test_auth_headers_empty_when_no_token():
     import ui.app as app
+
     assert app._auth_headers({}) == {}
     assert app._auth_headers({"access_token": ""}) == {}
