@@ -18,6 +18,9 @@ dependencies = [
     "pyvis>=0.3.2",
 ]
 
+[project.optional-dependencies]
+neo4j = ["neo4j>=5"]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",

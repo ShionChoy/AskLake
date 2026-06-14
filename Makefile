@@ -1,4 +1,4 @@
-.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6 demo-p7 eval eval-real build-imdb build-imdb-full build-graph build-crm eval-real-crm serve ui clean
+.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6 demo-p7 eval eval-real build-imdb build-imdb-full build-graph build-crm eval-real-crm serve ui clean graph-up graph-down graph-load-neo4j demo-neo4j
 
 PARQUET_DIR_APP := $(if $(wildcard data/imdb/parquet_full),data/imdb/parquet_full,data/imdb/parquet)
 
@@ -70,3 +70,17 @@ ui:
 clean:
 	find . -path ./.venv -prune -o -type d -name __pycache__ -print0 | xargs -0 rm -rf
 	rm -rf .pytest_cache .ruff_cache .mypy_cache
+
+graph-up:
+	docker compose --profile graph up -d neo4j
+
+graph-down:
+	docker compose --profile graph down
+
+graph-load-neo4j:
+	NEO4J_URI=$(or $(NEO4J_URI),bolt://localhost:7687) NEO4J_USER=$(or $(NEO4J_USER),neo4j) NEO4J_PASSWORD=$(or $(NEO4J_PASSWORD),asklake-graph) \
+	uv run python -m scripts.load_neo4j
+
+demo-neo4j:
+	NEO4J_URI=$(or $(NEO4J_URI),bolt://localhost:7687) NEO4J_USER=$(or $(NEO4J_USER),neo4j) NEO4J_PASSWORD=$(or $(NEO4J_PASSWORD),asklake-graph) \
+	uv run python -m scripts.demo_neo4j

@@ -226,6 +226,8 @@ make clean       # removes build artifacts and temporary files
 | `ASKLAKE_PARQUET_DIR` | built parquet location (default `data/imdb/parquet`) |
 | `ASKLAKE_AUTH_CONFIG` | path to `auth.yaml` token→role map; unset = all requests degrade to `public` |
 | `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` | enable `/metrics` Prometheus exposition |
+| `ASKLAKE_GRAPH_BACKEND` | knowledge-graph backend: `memory` (default) or `neo4j` |
+| `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | Neo4j connection (when backend=neo4j) |
 | `ASKLAKE_API_PORT` | API port (default `8000`) |
 | `ASKLAKE_API_URL` | URL the UI calls (default `http://localhost:8000`) |
 
@@ -252,6 +254,22 @@ docker compose --profile core --profile observability up
 # Prometheus on :9090, Grafana on :3000 (anonymous admin)
 # Dashboard: "AskLake Observability"
 ```
+
+### Optional: Neo4j graph backend
+
+The GraphRAG path runs on an in-process store by default. To run it on **Neo4j** (Cypher
+traversal, on-demand `graph` profile), install the extra and bring the DB up:
+
+````bash
+uv sync --extra neo4j
+make graph-up                 # neo4j on :7687 (Bolt) and :7474 (Browser)
+make graph-load-neo4j         # bulk-loads data/imdb/graph/triples.jsonl (schema + UNWIND MERGE)
+ASKLAKE_GRAPH_BACKEND=neo4j make serve
+````
+
+The graph is a typed property graph (`:Film`/`:Person`/`:Theme`… nodes, typed relationships with
+`source` citations); the typed retrieval shapes run as Cypher. If Neo4j is unreachable at boot
+the server falls back to the in-memory graph. Shut it down with `make graph-down`.
 
 ---
 
