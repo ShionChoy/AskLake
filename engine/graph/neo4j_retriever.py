@@ -97,10 +97,11 @@ class Neo4jGraphRetriever:
             if len(collected) >= self._max_triples:
                 break
             nxt = []
+            frontier_degrees = self._store.degrees(frontier)  # one batched query per hop
             for ent in frontier:
                 if len(collected) >= self._max_triples:
                     break
-                expandable = self._store.degree(ent) <= self._max_degree
+                expandable = frontier_degrees.get(ent, 0) <= self._max_degree
                 for t in self._store.neighbors(ent, limit=self._max_neighbors):
                     key = (t.subject, t.relation, t.obj, t.source)
                     if key not in seen_triples:
