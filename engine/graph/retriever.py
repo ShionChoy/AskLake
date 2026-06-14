@@ -123,6 +123,24 @@ class LexicalSeedProvider:
         return maximal[: self._top_k]
 
 
+def rank_triples(triples, seedset, targets, degree_of):
+    """Relevance rank: +3 target-relation match, +2 seed proximity, +1/log(2+degree) anti-hub.
+    `degree_of` maps an entity name to its degree (missing -> 1). De-dups while keeping best order.
+    Shared by GraphRetriever (in-memory) and Neo4jGraphRetriever (Cypher)."""
+
+    def score(t):
+        s = 0.0
+        if targets and t.relation in targets:
+            s += 3.0
+        if t.subject in seedset or t.obj in seedset:
+            s += 2.0
+        deg = max(degree_of.get(t.subject, 1), degree_of.get(t.obj, 1))
+        s += 1.0 / math.log(2 + deg)
+        return s
+
+    return sorted(dict.fromkeys(triples), key=score, reverse=True)
+
+
 class GraphRetriever:
     """Intent-aware multi-hop retrieval. Finds seeds via the SeedProvider, resolves a query intent
     (when an IntentResolver is supplied), runs the shape strategy, and returns a relevance-ranked
@@ -255,14 +273,4 @@ class GraphRetriever:
         return collected
 
     def _rank(self, triples, seedset, targets):
-        def score(t):
-            s = 0.0
-            if targets and t.relation in targets:
-                s += 3.0
-            if t.subject in seedset or t.obj in seedset:
-                s += 2.0
-            deg = max(self._degree.get(t.subject, 1), self._degree.get(t.obj, 1))
-            s += 1.0 / math.log(2 + deg)
-            return s
-
-        return sorted(dict.fromkeys(triples), key=score, reverse=True)
+        return rank_triples(triples, seedset, targets, self._degree)
