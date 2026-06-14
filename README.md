@@ -116,7 +116,7 @@ The simpler self-correct-only path (`AgenticSqlPath`: **SQLWriter → Validator 
 
 `GraphRagPath` runs an **intent-aware typed retrieval** over a knowledge-graph triple store. A `LexicalEntityLinker` resolves the titles in a question to graph nodes by contiguous n-gram span match (so *"the dark knight"* links to `The Dark Knight`, not the loose substring *"the dark"*); an `IntentResolver` maps the question to a target relation set and a retrieval *shape* — `entity_lookup` (cast/director, one hop), `cluster` (themes), `pairwise` (what two films share), or bounded `open` BFS as the fallback; and a degree-aware ranker (`1/log(degree)`) plus node-role gating (attribute values like genre/year are non-traversable leaves, theme hubs are downweighted) keep the retrieved subgraph small and on-topic. Each hop carries a source citation. Node roles and intents are declared per-dataset in `datasets/imdb_cmu/graph/ontology.yaml` and read generically by the engine, so switching datasets is config-only.
 
-`GroundedGraphRagPath` wraps the base path with a single LLM call that turns the citation-tagged triples into a grounded natural-language answer (and refuses when the subgraph is empty); the base path stays LLM-free for no-key / CI use. The graph itself is built from a deterministic IMDb-native backbone (genres, year, directors, cast, characters) plus an LLM theme-extraction pass constrained by the ontology. The default store is an in-process `InMemoryGraphStore`; a `Neo4jGraphStore` slots behind the same `GraphStore` port for larger graphs.
+`GroundedGraphRagPath` wraps the base path with a single LLM call that turns the citation-tagged triples into a grounded natural-language answer (and refuses when the subgraph is empty); the base path stays LLM-free for no-key / CI use. The graph itself is built from a deterministic IMDb-native backbone (genres, year, directors, cast, characters) plus an LLM theme-extraction pass constrained by the ontology. The default store is an in-process `InMemoryGraphStore`; an opt-in `Neo4jGraphStore` runs the same typed retrieval as **Cypher** behind the identical `GraphStore` port (`ASKLAKE_GRAPH_BACKEND=neo4j` — see *Optional: Neo4j graph backend*).
 
 ### Router
 
@@ -258,18 +258,24 @@ docker compose --profile core --profile observability up
 ### Optional: Neo4j graph backend
 
 The GraphRAG path runs on an in-process store by default. To run it on **Neo4j** (Cypher
-traversal, on-demand `graph` profile), install the extra and bring the DB up:
+traversal, on-demand `graph` profile — the one feature that needs Docker), install the extra and
+bring the DB up:
 
 ````bash
 uv sync --extra neo4j
-make graph-up                 # neo4j on :7687 (Bolt) and :7474 (Browser)
+make graph-up                 # neo4j:5-community on :7687 (Bolt) and :7474 (Browser)
 make graph-load-neo4j         # bulk-loads data/imdb/graph/triples.jsonl (schema + UNWIND MERGE)
-ASKLAKE_GRAPH_BACKEND=neo4j make serve
+ASKLAKE_GRAPH_BACKEND=neo4j NEO4J_PASSWORD=asklake-graph make serve
 ````
 
-The graph is a typed property graph (`:Film`/`:Person`/`:Theme`… nodes, typed relationships with
-`source` citations); the typed retrieval shapes run as Cypher. If Neo4j is unreachable at boot
-the server falls back to the in-memory graph. Shut it down with `make graph-down`.
+`NEO4J_PASSWORD` must match the container (`asklake-graph` by default) — set it inline as above or
+put it in `.env`; without it the server can't authenticate and falls back to in-memory. The graph
+is a typed property graph (`:Film`/`:Person`/`:Theme`… nodes, typed relationships with `source`
+citations) and the typed retrieval shapes run as Cypher. Explore it visually in **Neo4j Browser**
+at `http://localhost:7474` (user `neo4j` / pass `asklake-graph`). If Neo4j is unreachable at boot
+the server falls back to the in-memory graph (boot never fails). Data persists in the
+`neo4j_data` volume, so a later `make graph-up` resumes without reloading; shut it down with
+`make graph-down`. (Verified on the full graph: ~1.56M relationships / 506K typed nodes.)
 
 ---
 
