@@ -41,6 +41,23 @@ def append_triples(triples: Iterable[Triple], path: str | Path) -> int:
     return n
 
 
+def iter_triples(path: str | Path):
+    """Stream a JSONL graph file as Triples (lazy; constant memory). Raises FileNotFoundError if
+    absent, json.JSONDecodeError on a malformed line."""
+    with Path(path).open(encoding="utf-8") as f:  # FileNotFoundError if missing
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            d = json.loads(line)
+            yield Triple(
+                subject=d["subject"],
+                relation=d["relation"],
+                obj=d["obj"],
+                source=d.get("source", ""),
+            )
+
+
 def load_store(path: str | Path) -> InMemoryGraphStore:
     """Load a JSONL triple file into an InMemoryGraphStore.
 
@@ -48,18 +65,6 @@ def load_store(path: str | Path) -> InMemoryGraphStore:
     line (the file is written by save_triples, so corruption indicates a build problem).
     """
     store = InMemoryGraphStore()
-    with Path(path).open(encoding="utf-8") as f:  # FileNotFoundError if missing
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            d = json.loads(line)
-            store.add(
-                Triple(
-                    subject=d["subject"],
-                    relation=d["relation"],
-                    obj=d["obj"],
-                    source=d.get("source", ""),
-                )
-            )
+    for t in iter_triples(path):
+        store.add(t)
     return store
