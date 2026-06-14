@@ -327,15 +327,19 @@ def build_app(
 
             _roles = _ontology.relation_roles if _ontology is not None else {}
             _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-            _driver.verify_connectivity()
-            graph_store = Neo4jGraphStore(_driver, relation_roles=_roles)
-            neo4j_retriever = Neo4jGraphRetriever(
-                graph_store,
-                intent_resolver,
-                attribute_relations=graph_attr_relations,
-                connective_relations=graph_connective,
-                relation_roles=_roles,
-            )
+            try:
+                _driver.verify_connectivity()
+                graph_store = Neo4jGraphStore(_driver, relation_roles=_roles)
+                neo4j_retriever = Neo4jGraphRetriever(
+                    graph_store,
+                    intent_resolver,
+                    attribute_relations=graph_attr_relations,
+                    connective_relations=graph_connective,
+                    relation_roles=_roles,
+                )
+            except Exception:
+                _driver.close()
+                raise
             print(f"[api.serve] graph backend: neo4j ({NEO4J_URI})")
         except Exception as exc:  # noqa: BLE001
             print(f"[api.serve] neo4j unavailable ({exc}); falling back to in-memory graph")
