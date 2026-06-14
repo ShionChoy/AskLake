@@ -24,6 +24,11 @@ FIXTURE = [
     ("Inception", "HAS_GENRE", "Sci-Fi", "imdb:1"),
 ]
 
+# All entity names this test writes; deleted in teardown so the test is self-contained.
+# NEO4J_TEST_URI must point at a dedicated/ephemeral dev Neo4j (e.g. `make graph-up`), never a
+# shared/production graph — teardown deletes these names unconditionally.
+FIXTURE_NAMES = sorted({n for s, _r, o, _src in FIXTURE for n in (s, o)})
+
 
 def _store():
     from neo4j import GraphDatabase
@@ -35,9 +40,13 @@ def _store():
         NEO4J_TEST_URI,
         auth=(os.environ["NEO4J_TEST_USER"], os.environ["NEO4J_TEST_PASSWORD"]),
     )
-    store = Neo4jGraphStore(driver, relation_roles=ROLES)
-    store.ensure_schema()
-    store.load_triples(Triple(s, r, o, src) for s, r, o, src in FIXTURE)
+    try:
+        store = Neo4jGraphStore(driver, relation_roles=ROLES)
+        store.ensure_schema()
+        store.load_triples(Triple(s, r, o, src) for s, r, o, src in FIXTURE)
+    except Exception:
+        driver.close()
+        raise
     return store, driver
 
 
@@ -59,4 +68,5 @@ def test_entity_lookup_live():
         rels = {t.relation for t in sg.triples}
         assert "ACTED_IN" in rels and "HAS_GENRE" not in rels
     finally:
+        store.query("MATCH (n:Entity) WHERE n.name IN $names DETACH DELETE n", names=FIXTURE_NAMES)
         driver.close()
