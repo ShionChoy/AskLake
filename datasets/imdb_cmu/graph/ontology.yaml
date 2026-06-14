@@ -12,6 +12,15 @@ intents:
   - {name: director,   shape: entity_lookup, triggers: [director, directors, directed, directs, filmmaker, made], target_relations: [DIRECTED_BY]}
   - {name: themes,     shape: cluster,       triggers: [theme, themes, motif, motifs, about, plot, story, message, meaning], target_relations: [HAS_THEME]}
   - {name: connection, shape: pairwise,      triggers: [related, connection, connected, common, between, share, shared, link, links, similar, both], target_relations: [HAS_THEME, DIRECTED_BY, ACTED_IN]}
+relation_roles:
+  HAS_GENRE:          {subject: Film,      object: Genre}
+  RELEASED_IN:        {subject: Film,      object: Year}
+  DIRECTED_BY:        {subject: Film,      object: Person}
+  ACTED_IN:           {subject: Person,    object: Film}
+  FEATURES_CHARACTER: {subject: Film,      object: Character}
+  PLAYED_BY:          {subject: Character, object: Person}
+  HAS_THEME:          {subject: Film,      object: Theme}
+  SET_IN:             {subject: Film,      object: Place}
 hint: >
   Use the film's title as the subject for film-level facts. Emit DIRECTED_BY -> director
   (a person), HAS_THEME -> a short theme phrase (e.g. "memory", "identity", "time"),

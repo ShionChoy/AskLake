@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -33,6 +33,7 @@ class GraphOntology:
     connective_relations: tuple[str, ...] = ()
     entity_relations: tuple[str, ...] = ()
     intents: tuple[Intent, ...] = ()
+    relation_roles: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 def load_ontology(path: str | Path) -> GraphOntology:
@@ -55,4 +56,8 @@ def load_ontology(path: str | Path) -> GraphOntology:
         connective_relations=tuple(data.get("connective_relations", []) or []),
         entity_relations=tuple(data.get("entity_relations", []) or []),
         intents=intents,
+        relation_roles={
+            str(k): {str(rk): str(rv) for rk, rv in (v or {}).items()}
+            for k, v in (data.get("relation_roles", {}) or {}).items()
+        },
     )
