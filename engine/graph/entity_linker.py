@@ -109,16 +109,31 @@ class LexicalEntityLinker:
         max_ngram: int = 6,
     ):
         non_seedable = {t.obj for t in store.triples() if t.relation in attribute_relations}
-        self._by_norm: dict[str, list[str]] = defaultdict(list)
-        for e in store.entities():
-            if e in non_seedable:
-                continue
+        seedable = (e for e in store.entities() if e not in non_seedable)
+        self._by_norm = self._build_index(seedable)
+        self._top_k = top_k
+        self._max_ngram = max_ngram
+
+    @classmethod
+    def from_names(cls, names, *, top_k: int = 10, max_ngram: int = 6) -> LexicalEntityLinker:
+        """Build a linker from an iterable of already-seedable entity names (attribute values
+        excluded by the caller). Used by the Neo4j backend, which fetches names via Cypher
+        instead of materializing all triples."""
+        self = cls.__new__(cls)
+        self._by_norm = cls._build_index(names)
+        self._top_k = top_k
+        self._max_ngram = max_ngram
+        return self
+
+    @staticmethod
+    def _build_index(names):
+        by_norm: dict[str, list[str]] = defaultdict(list)
+        for e in names:
             toks = _tokens(e)
             if not toks or all(t in _NON_CONTENT for t in toks):
                 continue
-            self._by_norm[" ".join(toks)].append(e)
-        self._top_k = top_k
-        self._max_ngram = max_ngram
+            by_norm[" ".join(toks)].append(e)
+        return by_norm
 
     def seeds(self, question: str) -> list[str]:
         q = _tokens(question)
