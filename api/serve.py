@@ -44,6 +44,10 @@ from engine.semantic.value_index import build_value_index
 PARQUET_DIR = os.environ.get("ASKLAKE_PARQUET_DIR", "data/imdb/parquet")
 SEMANTIC_YAML = "datasets/imdb_cmu/semantic.yaml"
 GRAPH_PATH = os.environ.get("ASKLAKE_GRAPH_PATH", "data/imdb/graph/triples.jsonl")
+GRAPH_BACKEND = os.environ.get("ASKLAKE_GRAPH_BACKEND", "memory").lower()
+NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.environ.get("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "")
 ONTOLOGY_YAML = "datasets/imdb_cmu/graph/ontology.yaml"
 GOVERNANCE_YAML = "datasets/imdb_cmu/governance.yaml"
 AUTH_CONFIG = os.environ.get("ASKLAKE_AUTH_CONFIG", "auth.yaml")
@@ -295,17 +299,12 @@ def build_app(
     app.state.provider_name = default_provider
     app.state.sql_path_kind = agent_kind
 
-    # Optional knowledge graph: use an injected store (tests) or load the persisted triples.
-    if graph_store is None and Path(GRAPH_PATH).exists():
-        try:
-            graph_store = load_store(GRAPH_PATH)
-        except Exception as exc:  # noqa: BLE001
-            print(f"[api.serve] failed to load graph at {GRAPH_PATH} ({exc}); graph disabled")
-            graph_store = None
+    # Knowledge-graph ontology (needed first: relation_roles drive Neo4j node typing).
     graph_attr_relations: frozenset[str] = frozenset()
     graph_connective: frozenset[str] = frozenset()
     graph_empty_hint = "No matching facts found in the knowledge graph."
     intent_resolver = None
+    _ontology = None
     try:
         _ontology = load_ontology(ONTOLOGY_YAML)
         graph_attr_relations = frozenset(_ontology.attribute_relations)
@@ -317,14 +316,50 @@ def build_app(
     except Exception as exc:  # noqa: BLE001
         print(f"[api.serve] ontology unavailable ({exc}); seeding without typing")
 
+    # Optional knowledge graph: injected store (tests) > Neo4j (opt-in) > persisted triples.
+    neo4j_retriever = None
+    if graph_store is None and GRAPH_BACKEND == "neo4j":
+        try:
+            from neo4j import GraphDatabase
+
+            from engine.graph.neo4j_retriever import Neo4jGraphRetriever
+            from engine.graph.neo4j_store import Neo4jGraphStore
+
+            _roles = _ontology.relation_roles if _ontology is not None else {}
+            _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+            _driver.verify_connectivity()
+            graph_store = Neo4jGraphStore(_driver, relation_roles=_roles)
+            neo4j_retriever = Neo4jGraphRetriever(
+                graph_store,
+                intent_resolver,
+                attribute_relations=graph_attr_relations,
+                connective_relations=graph_connective,
+                relation_roles=_roles,
+            )
+            print(f"[api.serve] graph backend: neo4j ({NEO4J_URI})")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[api.serve] neo4j unavailable ({exc}); falling back to in-memory graph")
+            graph_store = None
+    if graph_store is None and Path(GRAPH_PATH).exists():
+        try:
+            graph_store = load_store(GRAPH_PATH)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[api.serve] failed to load graph at {GRAPH_PATH} ({exc}); graph disabled")
+            graph_store = None
+
     if graph_store is not None:
-        _base_graph = GraphRagPath(
-            graph_store,
-            attribute_relations=graph_attr_relations,
-            connective_relations=graph_connective,
-            intent_resolver=intent_resolver,
-            empty_hint=graph_empty_hint,
-        )
+        if neo4j_retriever is not None:
+            _base_graph = GraphRagPath(
+                graph_store, retriever=neo4j_retriever, empty_hint=graph_empty_hint
+            )
+        else:
+            _base_graph = GraphRagPath(
+                graph_store,
+                attribute_relations=graph_attr_relations,
+                connective_relations=graph_connective,
+                intent_resolver=intent_resolver,
+                empty_hint=graph_empty_hint,
+            )
         _graph_impl = _base_graph
         if default_llm is not None:
             _graph_impl = GroundedGraphRagPath(_base_graph, default_llm)
