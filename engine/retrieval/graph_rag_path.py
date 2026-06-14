@@ -72,19 +72,25 @@ class GraphRagPath:
         empty_hint: str = "No matching facts found in the knowledge graph.",
         intent_resolver: object | None = None,
         seed_provider: object | None = None,
+        retriever: object | None = None,
     ):
         self._store = store
         self._max_rows = max_rows
         self._empty_hint = empty_hint
-        self._retriever = GraphRetriever(
-            store,
-            max_hops=max_hops,
-            attribute_relations=attribute_relations,
-            connective_relations=connective_relations,
-            top_k_seeds=top_k_seeds,
-            intent_resolver=intent_resolver,
-            seed_provider=seed_provider,
-        )
+        if retriever is not None:
+            # Injected (e.g. Neo4jGraphRetriever). The default GraphRetriever is NOT built —
+            # its constructor eagerly materializes store.triples()/entities().
+            self._retriever = retriever
+        else:
+            self._retriever = GraphRetriever(
+                store,
+                max_hops=max_hops,
+                attribute_relations=attribute_relations,
+                connective_relations=connective_relations,
+                top_k_seeds=top_k_seeds,
+                intent_resolver=intent_resolver,
+                seed_provider=seed_provider,
+            )
 
     def can_handle(self, question: str) -> bool:
         w = _words(question)
