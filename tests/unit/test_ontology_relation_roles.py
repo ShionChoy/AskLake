@@ -19,6 +19,6 @@ def test_relation_roles_defaults_to_empty(tmp_path):
 
 
 def test_imdb_ontology_has_relation_roles():
-    ont = load_ontology("datasets/imdb_cmu/graph/ontology.yaml")
+    ont = load_ontology("datasets/imdb/graph/ontology.yaml")
     assert ont.relation_roles["ACTED_IN"] == {"subject": "Person", "object": "Film"}
     assert ont.relation_roles["HAS_THEME"] == {"subject": "Film", "object": "Theme"}

@@ -17,7 +17,7 @@ class RetrievalResult:
 
 @runtime_checkable
 class RetrievalPath(Protocol):
-    """A grounded retrieval path. SqlPath (P1), GraphRagPath (P4)."""
+    """A grounded retrieval path such as SqlPath or GraphRagPath."""
 
     name: str
 

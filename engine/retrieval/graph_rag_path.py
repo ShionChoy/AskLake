@@ -54,8 +54,9 @@ def _narrative(
 
 
 class GraphRagPath:
-    """RetrievalPath (P4): answers from a knowledge graph via multi-hop retrieval with traceable
-    citations. Additive sibling of SqlPath; selected by the Router. Reuses the generic
+    """Answer from a knowledge graph via multi-hop retrieval with traceable citations.
+
+    Additive sibling of SqlPath; selected by the Router. Reuses the generic
     RetrievalResult (facts ride in `result` as rows; citations in `narrative`)."""
 
     name = "graph"

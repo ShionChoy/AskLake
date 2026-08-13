@@ -1,5 +1,4 @@
-"""`make eval` entrypoint: prints the offline baseline-vs-agentic comparison table.
-Headline numbers come from a real-LLM run over a BIRD/Spider subset (see docs/eval.md)."""
+"""Print the deterministic offline SQL, semantic-grounding, and routing comparisons."""
 
 from __future__ import annotations
 

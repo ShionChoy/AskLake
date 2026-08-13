@@ -2,7 +2,7 @@
 
 **Governed, multi-agent natural-language analytics over your own data.**
 
-AskLake answers plain-English questions through two grounded retrieval paths — Text-to-SQL over a DuckDB/Parquet lakehouse and GraphRAG over a knowledge graph — with a Router that picks one or fuses both. The LLM is a swappable component (DeepSeek by default, Anthropic supported); the engineering value is everything around it: a port-and-adapter engine, a semantic layer, agentic self-correction, governance (RBAC/PII/cost guardrails), a quantified eval harness, and observability. Runs on a 16 GB laptop — DuckDB is embedded, no Docker required for local use.
+AskLake answers plain-English questions through two grounded retrieval paths — Text-to-SQL over a DuckDB/Parquet lakehouse and GraphRAG over a knowledge graph — with a Router that picks one or fuses both. The LLM is a swappable component (DeepSeek by default, Anthropic supported); the engineering value is everything around it: a port-and-adapter engine, a semantic layer, agentic self-correction, governance (RBAC/PII/cost guardrails), a quantified eval harness, and observability. It runs directly with `uv` on a 16 GB laptop; DuckDB is embedded.
 
 ---
 
@@ -114,7 +114,7 @@ The simpler self-correct-only path (`AgenticSqlPath`: **SQLWriter → Validator 
 
 ### GraphRAG
 
-`GraphRagPath` runs an **intent-aware typed retrieval** over a knowledge-graph triple store. A `LexicalEntityLinker` resolves the titles in a question to graph nodes by contiguous n-gram span match (so *"the dark knight"* links to `The Dark Knight`, not the loose substring *"the dark"*); an `IntentResolver` maps the question to a target relation set and a retrieval *shape* — `entity_lookup` (cast/director, one hop), `cluster` (themes), `pairwise` (what two films share), or bounded `open` BFS as the fallback; and a degree-aware ranker (`1/log(degree)`) plus node-role gating (attribute values like genre/year are non-traversable leaves, theme hubs are downweighted) keep the retrieved subgraph small and on-topic. Each hop carries a source citation. Node roles and intents are declared per-dataset in `datasets/imdb_cmu/graph/ontology.yaml` and read generically by the engine, so switching datasets is config-only.
+`GraphRagPath` runs an **intent-aware typed retrieval** over a knowledge-graph triple store. A `LexicalEntityLinker` resolves the titles in a question to graph nodes by contiguous n-gram span match (so *"the dark knight"* links to `The Dark Knight`, not the loose substring *"the dark"*); an `IntentResolver` maps the question to a target relation set and a retrieval *shape* — `entity_lookup` (cast/director, one hop), `cluster` (themes), `pairwise` (what two films share), or bounded `open` BFS as the fallback; and a degree-aware ranker (`1/log(degree)`) plus node-role gating (attribute values like genre/year are non-traversable leaves, theme hubs are downweighted) keep the retrieved subgraph small and on-topic. Each hop carries a source citation. Node roles and intents are declared per-dataset in `datasets/imdb/graph/ontology.yaml` and read generically by the engine, so switching datasets is config-only.
 
 `GroundedGraphRagPath` wraps the base path with a single LLM call that turns the citation-tagged triples into a grounded natural-language answer (and refuses when the subgraph is empty); the base path stays LLM-free for no-key / CI use. The graph itself is built from a deterministic IMDb-native backbone (genres, year, directors, cast, characters) plus an LLM theme-extraction pass constrained by the ontology. The default store is an in-process `InMemoryGraphStore`; an opt-in `Neo4jGraphStore` runs the same typed retrieval as **Cypher** behind the identical `GraphStore` port (`ASKLAKE_GRAPH_BACKEND=neo4j` — see *Optional: Neo4j graph backend*).
 
@@ -162,7 +162,7 @@ A five-rung **ablation** — each rung adds one capability over the previous —
 | +plan/self-consistency | 100% | 83% | 4.0 | 16000 | 92% | 67% | 90% |
 | grounded (+ critic) | 100% | 83% | 4.2 | 17400 | 89% | 67% | 94% |
 
-**CRM** — a synthetic second dataset (`datasets/crm_demo/`, 11-case gold) the engine was **never tuned for, with no hand-authored few-shots**:
+**CRM** — a synthetic second dataset (`datasets/crm/`, 11-case gold) the engine was **never tuned for, with no hand-authored few-shots**:
 
 | system | valid-SQL | exec-acc | llm/q | ms/q | aggregation | top-N | multi-hop |
 |---|---|---|---|---|---|---|---|
@@ -186,18 +186,6 @@ Reproduce: `make build-imdb MIN_VOTES=25 && make eval-real` (IMDb) and `make bui
 
 ## Development
 
-### Hermetic demos (no API key, no data download)
-
-```bash
-make demo        # runs demo-p0 through demo-p7 in sequence
-make demo-p0     # DuckDB smoke test
-make demo-p2     # agentic self-correction (rating → averageRating)
-make demo-p3     # governance: analyst vs public role, cost guardrail
-make demo-p4     # GraphRAG + Router fusion (Nolan films + plot themes)
-make demo-p5     # observability: instrumented self-correction + /metrics excerpt
-make demo-p7     # authenticated RBAC: row-level security + PII masking by role
-```
-
 ### Tests and lint
 
 ```bash
@@ -207,7 +195,7 @@ make lint        # ruff check + ruff format --check
 
 ### CI
 
-CI runs all demos (`p0`→`p7`), the full test suite, and a Docker image build on every push — no prior demo regresses.
+CI runs lint, formatting checks, the full test suite, and the hermetic evaluation on every push.
 
 ### Clean up
 
@@ -245,37 +233,30 @@ ASKLAKE_LLM_PROVIDER=anthropic
 
 Both providers implement the same `LLMProvider` port — no other config changes needed.
 
-### Optional: Prometheus + Grafana
+### Optional: Prometheus metrics
 
-The observability stack is memory-heavy and off by default. Bring it up alongside the core stack when you want live dashboards:
-
-```bash
-docker compose --profile core --profile observability up
-# Prometheus on :9090, Grafana on :3000 (anonymous admin)
-# Dashboard: "AskLake Observability"
-```
+Set `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` to expose application metrics at `/metrics`.
+An independently managed Prometheus instance can scrape that endpoint; infrastructure provisioning
+is intentionally outside this repository.
 
 ### Optional: Neo4j graph backend
 
-The GraphRAG path runs on an in-process store by default. To run it on **Neo4j** (Cypher
-traversal, on-demand `graph` profile — the one feature that needs Docker), install the extra and
-bring the DB up:
+The GraphRAG path runs on an in-process store by default. To use an independently managed
+**Neo4j** server for Cypher traversal, install the optional driver, load the generated graph, and
+start AskLake with the matching connection settings:
 
-````bash
+```bash
 uv sync --extra neo4j
-make graph-up                 # neo4j:5-community on :7687 (Bolt) and :7474 (Browser)
-make graph-load-neo4j         # bulk-loads data/imdb/graph/triples.jsonl (schema + UNWIND MERGE)
-ASKLAKE_GRAPH_BACKEND=neo4j NEO4J_PASSWORD=asklake-graph make serve
-````
+NEO4J_URI=bolt://localhost:7687 NEO4J_USER=neo4j NEO4J_PASSWORD=... make graph-load-neo4j
+ASKLAKE_GRAPH_BACKEND=neo4j NEO4J_URI=bolt://localhost:7687 \
+  NEO4J_USER=neo4j NEO4J_PASSWORD=... make serve
+```
 
-`NEO4J_PASSWORD` must match the container (`asklake-graph` by default) — set it inline as above or
-put it in `.env`; without it the server can't authenticate and falls back to in-memory. The graph
-is a typed property graph (`:Film`/`:Person`/`:Theme`… nodes, typed relationships with `source`
-citations) and the typed retrieval shapes run as Cypher. Explore it visually in **Neo4j Browser**
-at `http://localhost:7474` (user `neo4j` / pass `asklake-graph`). If Neo4j is unreachable at boot
-the server falls back to the in-memory graph (boot never fails). Data persists in the
-`neo4j_data` volume, so a later `make graph-up` resumes without reloading; shut it down with
-`make graph-down`. (Verified on the full graph: ~1.56M relationships / 506K typed nodes.)
+`make graph-load-neo4j` bulk-loads `data/imdb/graph/triples.jsonl` after `make build-graph`.
+The result is a typed property graph (`:Film`/`:Person`/`:Theme` nodes and typed relationships with
+source citations). If Neo4j is unreachable at boot, AskLake logs the error and falls back to the
+in-memory graph. Server provisioning, persistence, backup, and shutdown remain the operator's
+responsibility.
 
 ---
 
@@ -287,8 +268,8 @@ api/             # FastAPI app (/ask, /query, /info, /ask_trace, /metrics)
 ui/              # Streamlit front-end
 datasets/        # per-dataset config (semantic.yaml, governance.yaml, graph ontology, connector)
 eval/            # eval harness + IMDb gold set (eval/imdb_gold.py)
-demos/           # hermetic demo scripts (demo-p0 through demo-p7)
-infra/           # Prometheus + Grafana provisioning (observability profile)
+scripts/         # data download, graph build, and optional Neo4j loading commands
+docs/            # current dataset, evaluation, browser, and architecture documentation
 tests/           # unit + integration tests
 ```
 

@@ -17,8 +17,8 @@ def _no_disk_graph(monkeypatch, tmp_path):
 
 def _graph_store() -> InMemoryGraphStore:
     s = InMemoryGraphStore()
-    s.add(Triple("The Dark Knight", "DIRECTED_BY", "Christopher Nolan", "cmu:1"))
-    s.add(Triple("The Dark Knight", "HAS_THEME", "identity", "cmu:1"))
+    s.add(Triple("The Dark Knight", "DIRECTED_BY", "Christopher Nolan", "wiki:1"))
+    s.add(Triple("The Dark Knight", "HAS_THEME", "identity", "wiki:1"))
     return s
 
 
@@ -251,7 +251,7 @@ def test_serve_passes_ontology_attribute_relations_to_graph_path(monkeypatch):
     monkeypatch.setattr("api.serve.GraphRagPath", spy)
     serve.build_app(backend=DuckDBBackend(), graph_store=_graph_store())
 
-    expected = frozenset(load_ontology("datasets/imdb_cmu/graph/ontology.yaml").attribute_relations)
+    expected = frozenset(load_ontology("datasets/imdb/graph/ontology.yaml").attribute_relations)
     assert captured.get("attribute_relations") == expected
     assert "HAS_GENRE" in captured["attribute_relations"]
 
@@ -270,6 +270,6 @@ def test_serve_passes_ontology_empty_hint_to_graph_path(monkeypatch):
     monkeypatch.setattr("api.serve.GraphRagPath", spy)
     serve.build_app(backend=DuckDBBackend(), graph_store=_graph_store())
 
-    expected = load_ontology("datasets/imdb_cmu/graph/ontology.yaml").empty_graph_hint
+    expected = load_ontology("datasets/imdb/graph/ontology.yaml").empty_graph_hint
     assert captured.get("empty_hint") == expected
     assert captured["empty_hint"]  # non-empty

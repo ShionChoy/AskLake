@@ -1,6 +1,6 @@
 import duckdb
 
-from datasets.imdb_cmu.graph_corpus import select_plot_docs
+from datasets.imdb.graph_corpus import select_plot_docs
 
 
 def _fixture_parquet(pq):

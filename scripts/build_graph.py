@@ -14,15 +14,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
 from pathlib import Path
 
-from datasets.imdb_cmu.graph_corpus import select_plot_docs
-from datasets.imdb_cmu.graph_structured import structured_triples
+from datasets.imdb.graph_corpus import select_plot_docs
+from datasets.imdb.graph_structured import structured_triples
 from engine.graph.extraction import PlotDoc, extract_triples
 from engine.graph.ontology import GraphOntology, load_ontology
 from engine.graph.persistence import append_triples, save_triples
 from engine.llm.factory import make_provider
 from engine.ports.llm import LLMProvider
 
-ONTOLOGY_YAML = "datasets/imdb_cmu/graph/ontology.yaml"
+ONTOLOGY_YAML = "datasets/imdb/graph/ontology.yaml"
 
 _THEME_RELATIONS = ("HAS_THEME", "SET_IN")
 _THEME_HINT = (

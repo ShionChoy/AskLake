@@ -7,7 +7,7 @@ from engine.ports.storage import QueryResult
 
 @runtime_checkable
 class GovernanceHook(Protocol):
-    """Pre/post query governance. Passthrough (P0) -> RBAC/PII/cost guardrails (P3)."""
+    """Pre/post-query governance interface for RBAC, PII, and cost guardrails."""
 
     def before_query(self, sql: str, role: str) -> str: ...
 

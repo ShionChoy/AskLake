@@ -16,7 +16,7 @@ class Triple:
 
 @runtime_checkable
 class GraphStore(Protocol):
-    """Knowledge-graph storage + traversal. InMemoryGraphStore (P4, hermetic); Neo4j later."""
+    """Knowledge-graph storage and traversal implemented in memory or with Neo4j."""
 
     def add(self, triple: Triple) -> None: ...
 

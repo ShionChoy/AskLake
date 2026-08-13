@@ -86,7 +86,7 @@ class RoutingDecision:
 
 
 class Router:
-    """RetrievalPath (P4): scores SQL-vs-Graph features for a question and dispatches to one path
+    """Score SQL-vs-graph features for a question and dispatch to one path
     or fuses both via the Synthesizer. Heuristic + deterministic (hermetic); an LLM router can
     replace route() behind the same signature later. Registers paths additively — it does not
     modify SqlPath or GraphRagPath."""

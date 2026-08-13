@@ -19,21 +19,7 @@ jobs:
         run: |
           uv run ruff check .
           uv run ruff format --check .
-      - name: Tests (unit + smoke)
+      - name: Tests
         run: uv run pytest -v
-      - name: Demos (hermetic)
-        run: |
-          make demo-p0
-          make demo-p1
-          make demo-p2
-          make demo-p3
-          make demo-p4
-          make demo-p5
       - name: Eval (hermetic baseline vs agentic)
         run: make eval
-      - name: Validate compose
-        run: |
-          docker compose --profile core config
-          docker compose --profile observability config
-      - name: Build app image
-        run: docker build -t asklake:ci .

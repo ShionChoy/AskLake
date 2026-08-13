@@ -11,7 +11,7 @@ from engine.retrieval.sql_path import infer_chart_spec
 
 
 class AgenticSqlPath:
-    """RetrievalPath (P2): self-correcting NL->SQL. Additive sibling of SqlPath (P1).
+    """Self-correcting NL-to-SQL retrieval path and additive sibling of SqlPath.
 
     The injected executor wraps governance + StorageBackend so the graph stays storage-agnostic.
     """
@@ -39,7 +39,7 @@ class AgenticSqlPath:
         self._graph = build_agentic_sql_graph(llm, schema_provider, executor, max_retries)
 
     def can_handle(self, question: str) -> bool:
-        return True  # P2: SQL path. Router gains real logic in P4.
+        return True  # SQL is the general fallback; Router handles path selection.
 
     def run(self, question: str) -> RetrievalResult:
         state = self._graph.invoke({"question": question})

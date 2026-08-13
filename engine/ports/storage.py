@@ -24,7 +24,7 @@ class QueryResult:
 
 @runtime_checkable
 class StorageBackend(Protocol):
-    """Executes SQL and introspects schema. Implementations: DuckDB (P1), Iceberg (P1.5)."""
+    """Execute SQL and introspect schema. DuckDB is the default implementation."""
 
     def run_sql(self, sql: str) -> QueryResult: ...
 

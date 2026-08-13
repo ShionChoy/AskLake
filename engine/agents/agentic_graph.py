@@ -37,8 +37,7 @@ def build_agentic_sql_graph(
     executor: Callable[[str], QueryResult],
     max_retries: int = 2,
 ):
-    """Cyclic self-correcting graph (P2), additive sibling of build_sql_graph (P1, the eval
-    baseline).
+    """Cyclic self-correcting graph and additive sibling of the single-pass evaluation baseline.
 
     SQLWriter -> Validator -(error & attempts<max_retries)-> SelfCorrect -> Validator ... -> END.
     `executor(sql)` runs the SQL (raising on error); callers inject one that wraps governance +

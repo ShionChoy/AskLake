@@ -63,9 +63,7 @@ def extract_triples(llm: LLMProvider, doc: PlotDoc, ontology: GraphOntology) -> 
 def build_graph(
     llm: LLMProvider, docs: list[PlotDoc], ontology: GraphOntology
 ) -> InMemoryGraphStore:
-    """Build a knowledge graph by extracting triples from each document. The real pipeline feeds
-    the full CMU corpus + a live LLM (an offline manual step); the demo/CI feed canned docs +
-    FakeLLMProvider for a hermetic build."""
+    """Build an in-memory graph by extracting ontology-constrained triples from each document."""
     store = InMemoryGraphStore()
     for doc in docs:
         for t in extract_triples(llm, doc, ontology):

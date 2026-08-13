@@ -1,6 +1,6 @@
 import httpx
 
-from datasets.imdb_cmu.wiki_plots import _extract_plot_section, fetch_plot, resolve_enwiki_titles
+from datasets.imdb.wiki_plots import _extract_plot_section, fetch_plot, resolve_enwiki_titles
 
 
 class _FakeResp:
@@ -83,7 +83,7 @@ class _FlakyClient:
 
 
 def test_get_with_retry_recovers_from_transient():
-    from datasets.imdb_cmu.wiki_plots import _get_with_retry
+    from datasets.imdb.wiki_plots import _get_with_retry
 
     c = _FlakyClient(fail_times=2, payload={"ok": 1})
     resp = _get_with_retry(c, "http://x", None, sleep=lambda *_a: None)
@@ -94,7 +94,7 @@ def test_get_with_retry_recovers_from_transient():
 def test_get_with_retry_gives_up_after_attempts():
     import pytest
 
-    from datasets.imdb_cmu.wiki_plots import _get_with_retry
+    from datasets.imdb.wiki_plots import _get_with_retry
 
     c = _FlakyClient(fail_times=99, payload={"ok": 1})
     with pytest.raises(httpx.ConnectError):

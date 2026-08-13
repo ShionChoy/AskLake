@@ -4,9 +4,9 @@ from ui import graph_viz
 from ui.graph_viz import COLOR_LEAF, COLOR_SUBJECT, MAX_TRIPLES, build_network_data
 
 TRIPLES = [
-    ["The Dark Knight", "HAS_THEME", "chaos", "cmu:1"],
-    ["The Dark Knight", "HAS_THEME", "identity", "cmu:1"],
-    ["Inception", "HAS_THEME", "identity", "cmu:2"],
+    ["The Dark Knight", "HAS_THEME", "chaos", "wiki:1"],
+    ["The Dark Knight", "HAS_THEME", "identity", "wiki:1"],
+    ["Inception", "HAS_THEME", "identity", "wiki:2"],
 ]
 
 
@@ -38,11 +38,11 @@ def test_edge_label_and_source():
     assert e["from"] == "The Dark Knight"
     assert e["to"] == "chaos"
     assert e["label"] == "HAS_THEME"
-    assert e["title"] == "cmu:1"
+    assert e["title"] == "wiki:1"
 
 
 def test_truncates_over_cap():
-    big = [[f"s{i}", "REL", f"o{i}", f"cmu:{i}"] for i in range(MAX_TRIPLES + 50)]
+    big = [[f"s{i}", "REL", f"o{i}", f"wiki:{i}"] for i in range(MAX_TRIPLES + 50)]
     _, edges, truncated = build_network_data(big)
     assert truncated is True
     assert len(edges) == MAX_TRIPLES  # only the first MAX_TRIPLES are used
@@ -50,9 +50,9 @@ def test_truncates_over_cap():
 
 def test_skips_malformed_rows():
     rows = [
-        ["A", "REL", "B", "cmu:1"],
-        ["", "REL", "B", "cmu:2"],  # missing subject
-        ["A", "REL", "", "cmu:3"],  # missing object
+        ["A", "REL", "B", "wiki:1"],
+        ["", "REL", "B", "wiki:2"],  # missing subject
+        ["A", "REL", "", "wiki:3"],  # missing object
         ["A", "REL"],  # too short
     ]
     nodes, edges, _ = build_network_data(rows)

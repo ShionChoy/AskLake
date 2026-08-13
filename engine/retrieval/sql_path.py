@@ -36,7 +36,7 @@ class SqlPath:
         self._role = role
 
     def can_handle(self, question: str) -> bool:
-        return True  # P1: SQL is the only path. Router gains real logic in P4.
+        return True  # SQL is the general fallback; Router handles path selection.
 
     def run(self, question: str) -> RetrievalResult:
         state = self._graph.invoke({"question": question})

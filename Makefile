@@ -1,9 +1,6 @@
-.PHONY: dev lint test demo-p0 demo demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6 demo-p7 eval eval-real build-imdb build-imdb-full build-graph build-crm eval-real-crm serve ui clean graph-up graph-down graph-load-neo4j demo-neo4j
+.PHONY: lint test eval eval-real build-imdb build-imdb-full build-graph build-crm eval-real-crm serve ui clean graph-load-neo4j
 
 PARQUET_DIR_APP := $(if $(wildcard data/imdb/parquet_full),data/imdb/parquet_full,data/imdb/parquet)
-
-dev:
-	docker compose --profile core up
 
 lint:
 	uv run ruff check .
@@ -12,42 +9,16 @@ lint:
 test:
 	uv run pytest
 
-demo: demo-p0 demo-p1 demo-p2 demo-p3 demo-p4 demo-p5 demo-p6 demo-p7
-
-demo-p0:
-	uv run python demos/demo_p0.py
-
-demo-p1:
-	uv run python demos/demo_p1.py
-
 build-imdb:
-	uv run python -c "import os; from datasets.imdb_cmu.source import build_parquet; build_parquet(os.environ.get('IMDB_RAW','data/imdb/raw'), os.environ.get('PARQUET_DIR','data/imdb/parquet'), int(os.environ.get('MIN_VOTES','1000')))"
+	uv run python -c "import os; from datasets.imdb.source import build_parquet; build_parquet(os.environ.get('IMDB_RAW','data/imdb/raw'), os.environ.get('PARQUET_DIR','data/imdb/parquet'), int(os.environ.get('MIN_VOTES','1000')))"
 
 build-imdb-full:
-	uv run python -c "from datasets.imdb_cmu.source import build_parquet; build_parquet('data/imdb/raw','data/imdb/parquet_full', 0, ('movie','tvSeries','tvMovie'))"
+	uv run python -c "from datasets.imdb.source import build_parquet; build_parquet('data/imdb/raw','data/imdb/parquet_full', 0, ('movie','tvSeries','tvMovie'))"
 
 build-graph:
 	ASKLAKE_PARQUET_DIR=$(PARQUET_DIR_APP) GRAPH_FILMS=$(or $(GRAPH_FILMS),2000) \
 	GRAPH_MIN_VOTES=$(or $(GRAPH_MIN_VOTES),1000) GRAPH_CAST_CAP=$(or $(GRAPH_CAST_CAP),10) \
 	uv run python -m scripts.build_graph
-
-demo-p2:
-	uv run python demos/demo_p2.py
-
-demo-p3:
-	uv run python demos/demo_p3.py
-
-demo-p4:
-	uv run python demos/demo_p4.py
-
-demo-p5:
-	uv run python demos/demo_p5.py
-
-demo-p6:
-	uv run python demos/demo_p6.py
-
-demo-p7:
-	uv run python -m demos.demo_p7
 
 eval:
 	uv run python -m eval.run
@@ -56,7 +27,7 @@ eval-real:
 	uv run python -m eval.real_run
 
 build-crm:
-	uv run python -c "from datasets.crm_demo.source import build_parquet; build_parquet('data/crm/parquet')"
+	uv run python -c "from datasets.crm.source import build_parquet; build_parquet('data/crm/parquet')"
 
 eval-real-crm:
 	uv run python -m eval.real_run --dataset crm
@@ -71,16 +42,5 @@ clean:
 	find . -path ./.venv -prune -o -type d -name __pycache__ -print0 | xargs -0 rm -rf
 	rm -rf .pytest_cache .ruff_cache .mypy_cache
 
-graph-up:
-	docker compose --profile graph up -d neo4j
-
-graph-down:
-	docker compose --profile graph down
-
 graph-load-neo4j:
-	NEO4J_URI=$(or $(NEO4J_URI),bolt://localhost:7687) NEO4J_USER=$(or $(NEO4J_USER),neo4j) NEO4J_PASSWORD=$(or $(NEO4J_PASSWORD),asklake-graph) \
-	uv run python -m scripts.load_neo4j
-
-demo-neo4j:
-	NEO4J_URI=$(or $(NEO4J_URI),bolt://localhost:7687) NEO4J_USER=$(or $(NEO4J_USER),neo4j) NEO4J_PASSWORD=$(or $(NEO4J_PASSWORD),asklake-graph) \
-	uv run python -m scripts.demo_neo4j
+	uv run $(if $(wildcard .env),--env-file .env,) python -m scripts.load_neo4j

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 class FakeLLMProvider:
-    """Deterministic LLM for tests/demos. Cycles through `responses`, records prompts."""
+    """Deterministic LLM for tests. Cycles through `responses` and records prompts."""
 
     def __init__(self, responses: list[str]):
         if not responses:

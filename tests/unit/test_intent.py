@@ -3,7 +3,7 @@ from engine.graph.ontology import load_ontology
 
 
 def _resolver():
-    return IntentResolver(load_ontology("datasets/imdb_cmu/graph/ontology.yaml"))
+    return IntentResolver(load_ontology("datasets/imdb/graph/ontology.yaml"))
 
 
 def test_cast_question_resolves_to_cast_intent():

@@ -3,7 +3,7 @@ from pathlib import Path
 from engine.graph.ontology import load_ontology
 
 _ROOT = Path(__file__).resolve().parents[2]
-_ONT = _ROOT / "datasets" / "imdb_cmu" / "graph" / "ontology.yaml"
+_ONT = _ROOT / "datasets" / "imdb" / "graph" / "ontology.yaml"
 
 
 def test_imdb_ontology_parses():
@@ -17,7 +17,7 @@ def test_imdb_ontology_parses():
 def test_imdb_ontology_drops_language_and_country():
     from engine.graph.ontology import load_ontology
 
-    o = load_ontology("datasets/imdb_cmu/graph/ontology.yaml")
+    o = load_ontology("datasets/imdb/graph/ontology.yaml")
     assert "IN_LANGUAGE" not in o.relation_types
     assert "FROM_COUNTRY" not in o.relation_types
     assert "IN_LANGUAGE" not in o.attribute_relations
@@ -37,7 +37,7 @@ def test_imdb_ontology_drops_language_and_country():
 def test_ontology_parses_node_roles_and_intents():
     from engine.graph.ontology import load_ontology
 
-    o = load_ontology("datasets/imdb_cmu/graph/ontology.yaml")
+    o = load_ontology("datasets/imdb/graph/ontology.yaml")
     assert "HAS_THEME" in o.connective_relations
     assert "HAS_THEME" not in o.attribute_relations  # moved to connective in PR2
     assert "ACTED_IN" in o.entity_relations and "DIRECTED_BY" in o.entity_relations
