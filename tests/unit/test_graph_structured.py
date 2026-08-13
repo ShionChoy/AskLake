@@ -12,9 +12,9 @@ def _fixture_parquet(pq):
 
     copy(
         "SELECT * FROM (VALUES "
-        "('tt1','movie','The Matrix',1999,'Action,Sci-Fi'),"
-        "('tt2','movie','Obscure',2001,'Drama')) "
-        "v(tconst,titleType,primaryTitle,startYear,genres)",
+        "('tt1','movie','The Matrix',false,1999,'Action,Sci-Fi'),"
+        "('tt2','movie','Obscure',false,2001,'Drama')) "
+        "v(tconst,titleType,primaryTitle,isAdult,startYear,genres)",
         "title_basics",
     )
     copy(

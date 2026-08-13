@@ -63,3 +63,14 @@ IMDb 数据仅允许个人、非商业用途，不允许随项目重新分发。
 - 不提交 `data/`、Parquet、DuckDB 文件或抓取到的 Wikipedia 文本。
 - 自然语言提问只把 schema、语义上下文和必要的候选值发给 LLM；原始表数据留在本机。
 - 发布或共享图谱构建结果前，分别核对 IMDb 非商业条款和 Wikipedia CC BY-SA 要求。
+
+## 数据分类与执行策略
+
+治理配置位于 `datasets/imdb/governance.yaml`，采用互相独立的五类标签：保密性、许可、
+个人信息、可信度和内容属性。IMDb 影片表属于 `public_source + imdb_noncommercial`，并不等于
+可自由再分发；人物字段额外标记为 `public_personal`；`isAdult` 是内容标签；Wikipedia 关系
+保留 `wikipedia_cc_by_sa_4`；LLM 提取的主题和场景标记为 `llm_inferred` 并强制引用来源。
+
+`numVotes` 只用于评估样本质量和排序，不再决定访问权限。策略最终落实为可执行规则：角色
+允许的操作/表/列/图关系、成人内容行过滤、个人字段遮罩、SQL 复杂度和结果上限、批量导出
+限制、来源引用及许可提示。策略或视图构建失败会中止启动，不会回退为无过滤访问。

@@ -10,10 +10,11 @@ class Principal:
 
     user: str
     role: str
+    credential_id: str = ""
 
 
 @runtime_checkable
 class Authenticator(Protocol):
-    """Credential -> Principal. Missing/invalid credential degrades to least privilege."""
+    """Credential -> Principal. Invalid credentials raise; anonymous access is explicit."""
 
     def authenticate(self, credential: str | None) -> Principal: ...

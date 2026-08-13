@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from api.main import create_app
 from engine.auth.static_token import StaticTokenAuthenticator
 from engine.governance.policy import Policy, PolicyGovernance
+from engine.governance.views import build_role_views
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 from engine.ports.auth import Principal
 
@@ -23,6 +24,7 @@ def _app():
         )
     )
     auth = StaticTokenAuthenticator({"tok_a": Principal("alice", "analyst")})
+    build_role_views(backend, gov.policy)
     return create_app(backend=backend, governance=gov, authenticator=auth)
 
 
@@ -47,11 +49,11 @@ def test_query_without_token_is_public_and_masks_pii():
 def test_self_declared_body_role_is_ignored_security_regression():
     c = TestClient(_app())
     # No token, but the body lies and claims analyst -> still public -> still masked.
-    out = c.post(
+    response = c.post(
         "/query",
         json={"sql": "SELECT primaryName, birthYear FROM people LIMIT 10", "role": "analyst"},
-    ).json()
-    assert all(row[1] == "***" for row in out["rows"])
+    )
+    assert response.status_code == 422  # unknown authorization fields are rejected
 
 
 def test_ask_does_not_cache_lazy_path_across_roles():

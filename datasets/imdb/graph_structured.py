@@ -43,7 +43,8 @@ def structured_triples(
     res = backend.run_sql(
         f"SELECT b.tconst, b.primaryTitle, b.startYear, b.genres "
         f"FROM title_basics b JOIN title_ratings r USING(tconst) "
-        f"WHERE b.titleType='movie' AND r.numVotes >= {int(min_votes)}"
+        f"WHERE b.titleType='movie' AND NOT COALESCE(b.isAdult, false) "
+        f"AND r.numVotes >= {int(min_votes)}"
     )
     for tconst, title, year, genres in res.rows:
         for g in (genres or "").split(","):
@@ -60,7 +61,8 @@ def structured_triples(
         f"  WHERE directors IS NOT NULL AND directors != '' AND directors != '\\N'"
         f") c JOIN title_basics b USING(tconst) JOIN title_ratings r USING(tconst) "
         f"JOIN name_basics n ON n.nconst = c.nconst "
-        f"WHERE b.titleType='movie' AND r.numVotes >= {int(min_votes)}"
+        f"WHERE b.titleType='movie' AND NOT COALESCE(b.isAdult, false) "
+        f"AND r.numVotes >= {int(min_votes)}"
     )
     for tconst, title, director in res.rows:
         yield from emit(title, "DIRECTED_BY", director, tconst)
@@ -71,7 +73,8 @@ def structured_triples(
         f"FROM title_principals p "
         f"JOIN title_basics b USING(tconst) JOIN title_ratings r USING(tconst) "
         f"JOIN name_basics n ON n.nconst = p.nconst "
-        f"WHERE b.titleType='movie' AND r.numVotes >= {int(min_votes)} "
+        f"WHERE b.titleType='movie' AND NOT COALESCE(b.isAdult, false) "
+        f"AND r.numVotes >= {int(min_votes)} "
         f"AND p.category IN {_CAST_CATEGORIES} AND p.ordering <= {int(cast_cap)}"
     )
     for tconst, title, actor, characters in res.rows:

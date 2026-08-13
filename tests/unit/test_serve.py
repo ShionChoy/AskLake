@@ -22,6 +22,12 @@ def _graph_store() -> InMemoryGraphStore:
     return s
 
 
+def _graph_backend() -> DuckDBBackend:
+    backend = DuckDBBackend()
+    backend.setup("CREATE TABLE title_basics AS SELECT '1' AS tconst, false AS isAdult")
+    return backend
+
+
 def test_build_app_serves_grounded_trace():
     app = build_app(llm=FakeLLMProvider(["SELECT 1 AS x"]), backend=DuckDBBackend())
     c = TestClient(app)
@@ -54,6 +60,10 @@ def test_endpoints_registered_without_boot_key(monkeypatch):
     out = c.post("/ask_trace", json={"question": "q"}).json()
     assert out["columns"] is None
     assert "sidebar" in out["narrative"].lower()  # friendly no-key payload, not a 500
+
+    fallback = c.post("/ask", json={"question": "q"})
+    assert fallback.status_code == 503
+    assert fallback.json()["code"] == "model_unavailable"
 
 
 def test_ask_trace_uses_per_request_credentials(monkeypatch):
@@ -94,7 +104,8 @@ def test_ask_trace_redacts_api_key_in_errors(monkeypatch):
         json={"question": "q", "provider": "deepseek", "api_key": "sk-SECRET"},
     ).json()
     assert "sk-SECRET" not in out["narrative"]
-    assert "***" in out["narrative"]
+    assert "Request ID" in out["narrative"]
+    assert out["request_id"]
 
 
 def test_ask_trace_no_typed_key_shows_sidebar_prompt(monkeypatch):
@@ -129,7 +140,7 @@ def test_ask_trace_graph_path_no_key(monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ASKLAKE_LLM_PROVIDER", raising=False)
-    app = build_app(backend=DuckDBBackend(), graph_store=_graph_store())  # no LLM key at all
+    app = build_app(backend=_graph_backend(), graph_store=_graph_store())  # no LLM key at all
     c = TestClient(app)
     out = c.post(
         "/ask_trace", json={"question": "themes of The Dark Knight", "path": "graph"}
@@ -143,7 +154,7 @@ def test_ask_trace_graph_path_no_key(monkeypatch):
 def test_ask_trace_fusion_merges_sql_and_graph():
     app = build_app(
         llm=FakeLLMProvider(["SELECT 1 AS x"]),
-        backend=DuckDBBackend(),
+        backend=_graph_backend(),
         graph_store=_graph_store(),
     )
     c = TestClient(app)
@@ -158,7 +169,7 @@ def test_ask_trace_fusion_merges_sql_and_graph():
 def test_ask_trace_sql_override_forces_sql():
     app = build_app(
         llm=FakeLLMProvider(["SELECT 7 AS x"]),
-        backend=DuckDBBackend(),
+        backend=_graph_backend(),
         graph_store=_graph_store(),
     )
     c = TestClient(app)
@@ -168,7 +179,7 @@ def test_ask_trace_sql_override_forces_sql():
 
 
 def test_ask_trace_auto_routes_theme_question_to_graph():
-    app = build_app(backend=DuckDBBackend(), graph_store=_graph_store())  # no key needed
+    app = build_app(backend=_graph_backend(), graph_store=_graph_store())  # no key needed
     c = TestClient(app)
     out = c.post("/ask_trace", json={"question": "common themes in The Dark Knight"}).json()
     assert out["path"] == "graph"
@@ -187,7 +198,7 @@ def test_ask_trace_graph_includes_triples(monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ASKLAKE_LLM_PROVIDER", raising=False)
-    app = build_app(backend=DuckDBBackend(), graph_store=_graph_store())
+    app = build_app(backend=_graph_backend(), graph_store=_graph_store())
     c = TestClient(app)
     out = c.post(
         "/ask_trace", json={"question": "themes of The Dark Knight", "path": "graph"}
@@ -200,7 +211,7 @@ def test_ask_trace_graph_includes_triples(monkeypatch):
 def test_ask_trace_fusion_includes_graph_triples():
     app = build_app(
         llm=FakeLLMProvider(["SELECT 1 AS x"]),
-        backend=DuckDBBackend(),
+        backend=_graph_backend(),
         graph_store=_graph_store(),
     )
     c = TestClient(app)
@@ -216,7 +227,7 @@ def test_ask_trace_fusion_includes_graph_triples():
 def test_ask_trace_sql_only_has_no_graph_triples():
     app = build_app(
         llm=FakeLLMProvider(["SELECT 7 AS x"]),
-        backend=DuckDBBackend(),
+        backend=_graph_backend(),
         graph_store=_graph_store(),
     )
     c = TestClient(app)
@@ -232,7 +243,7 @@ def test_serve_uses_grounded_path_by_default(monkeypatch):
     from engine.llm.fake import FakeLLMProvider
 
     backend = DuckDBBackend()
-    backend.setup("CREATE TABLE title_basics AS SELECT 1 AS tconst;")
+    backend.setup("CREATE TABLE title_basics AS SELECT 1 AS tconst, false AS isAdult;")
     app = serve.build_app(llm=FakeLLMProvider(responses=["SELECT 1"]), backend=backend)
     assert app.state.sql_path_kind == "grounded"
 
@@ -249,7 +260,7 @@ def test_serve_passes_ontology_attribute_relations_to_graph_path(monkeypatch):
         return real(store, **kwargs)
 
     monkeypatch.setattr("api.serve.GraphRagPath", spy)
-    serve.build_app(backend=DuckDBBackend(), graph_store=_graph_store())
+    serve.build_app(backend=_graph_backend(), graph_store=_graph_store())
 
     expected = frozenset(load_ontology("datasets/imdb/graph/ontology.yaml").attribute_relations)
     assert captured.get("attribute_relations") == expected
@@ -268,7 +279,7 @@ def test_serve_passes_ontology_empty_hint_to_graph_path(monkeypatch):
         return real(store, **kwargs)
 
     monkeypatch.setattr("api.serve.GraphRagPath", spy)
-    serve.build_app(backend=DuckDBBackend(), graph_store=_graph_store())
+    serve.build_app(backend=_graph_backend(), graph_store=_graph_store())
 
     expected = load_ontology("datasets/imdb/graph/ontology.yaml").empty_graph_hint
     assert captured.get("empty_hint") == expected

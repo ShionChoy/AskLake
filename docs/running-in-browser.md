@@ -39,8 +39,9 @@ uv sync          # installs deps incl. httpx (needed by the DeepSeek provider)
 ```
 
 You also need a **DeepSeek API key** (`sk-...`) — or an Anthropic key if you prefer Claude. The
-key is optional at boot; without one the API still serves `/query` and `/health`, and you can
-enter the key in the browser.
+key is optional at boot; without one the API still serves `/health` and graph queries, and you can
+enter the key in the browser. Raw `/query` access is a separate governed capability and requires
+an `analyst` or `steward` Bearer token configured by digest in `auth.yaml`.
 
 > **Memory note (WSL):** the WSL guest sees only ~6–8 GB of the 16 GB host. The build below is
 > capped at 4 GB and the running server at 2 GB, so neither should OOM the guest.
@@ -170,8 +171,9 @@ curl -s localhost:8000/info | uv run python -m json.tool
 The left sidebar is where you bring your own key:
 
 - **Provider** — `deepseek` or `anthropic`.
-- **Model** — pick from the provider's defaults (e.g. `deepseek-v4-flash`, `deepseek-v4-pro`) or
-  choose **(custom…)** to type any model name.
+- **Model** — DeepSeek offers `deepseek-v4-flash` (default) and `deepseek-v4-pro`; Anthropic offers
+  `claude-sonnet-5`, `claude-opus-5`, `claude-fable-5`, and `claude-haiku-4-5`. Choose
+  **(custom…)** to type another model name.
 - **API key** — paste your key (the field is masked).
 - **Save locally** — writes `~/.config/asklake/credentials.json` (mode `0600`, on your machine
   only). Next launch, the sidebar pre-fills from it.
@@ -323,8 +325,10 @@ Neo4j lifecycle, persistence, backup, and shutdown are managed outside this repo
 |---|---|---|
 | GET | `/health` | `{"status":"ok"}` |
 | GET | `/info` | `{provider, model, path}` (default provider, or `(client-supplied)` when keyless) |
-| POST | `/query` | `{columns, rows}` for a raw SQL body `{"sql": "..."}` |
-| POST | `/ask` | NL→SQL: `{path, sql, columns, rows, chart_spec, narrative}` (credential-less fallback) |
+| GET | `/session` | effective principal plus server-authorized actions, row/column controls, and limits |
+| POST | `/query` | governed raw SQL for `analyst`/`steward`: `{columns, rows, governance, request_id}` |
+| POST | `/export` | bounded audited CSV export for `steward`; applies the same SQL and role-view controls |
+| POST | `/ask` | NL→SQL: `{path, sql, columns, rows, chart_spec, narrative, governance, request_id}` |
 | POST | `/ask_trace` | same as `/ask` **plus** `{model, steps[], elapsed_ms}`; accepts optional `provider`/`model`/`api_key` in the body (the UI prefers this) |
 | GET | `/metrics` | Prometheus exposition (active because `ASKLAKE_OBSERVABILITY_BACKEND=prometheus`) |
 
@@ -336,6 +340,10 @@ Neo4j lifecycle, persistence, backup, and shutdown are managed outside this repo
 | `ANTHROPIC_API_KEY` + `ASKLAKE_LLM_PROVIDER=anthropic` | API | use Claude instead of DeepSeek |
 | `ASKLAKE_OBSERVABILITY_BACKEND` | API | `prometheus` enables the `/metrics` endpoint (default `noop`) |
 | `ASKLAKE_PARQUET_DIR` | API | Parquet location (default `data/imdb/parquet`) |
+| `ASKLAKE_AUTH_CONFIG` | API | hashed Bearer-token to role configuration |
+| `ASKLAKE_AUTH_MODE` | API | `static` for local/gateway deployments or `oidc` for direct JWT validation |
+| `ASKLAKE_OIDC_*` | API | pinned issuer/audience/JWKS/algorithm and external-role claim mapping |
+| `ASKLAKE_AUDIT_PATH` | API | owner-only rotating JSONL audit sink; queries are hashed |
 | `ASKLAKE_API_HOST` / `ASKLAKE_API_PORT` | API | bind host/port (default `0.0.0.0:8000`) |
 | `ASKLAKE_API_URL` | UI | which API the UI calls (default `http://localhost:8000`) |
 | `MIN_VOTES` | `make build-imdb` | min votes to include a movie (default `1000`) |
