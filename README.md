@@ -161,6 +161,56 @@ Governance is enforced at the execution boundary from the versioned policy in
   responses explicitly. `POST /export` is restricted to `steward`, uses the same role views and
   AST controls, applies the role result cap, neutralizes spreadsheet formulas, and is audited.
 
+#### Issue and rotate local access tokens
+
+Static tokens are for local use or a deployment behind an identity-aware gateway. From the project
+root, create the ignored local configuration once and restrict its permissions:
+
+```bash
+test -f auth.yaml || cp auth.example.yaml auth.yaml
+chmod 600 auth.yaml
+```
+
+Generate one independent, 256-bit token for each named credential (`analyst`, `steward`, or a named
+`public` user):
+
+```bash
+uv run python -m engine.auth.static_token generate
+```
+
+The command prints the raw token once and its SHA-256 digest:
+
+```text
+token: <deliver-once-to-the-user>
+token_sha256: <store-this-64-character-digest>
+```
+
+The token does not contain a role. Deliver the raw `token` through a secrets manager and put only
+`token_sha256` in `auth.yaml`, where the server binds it to a user and role:
+
+```yaml
+version: 2
+allow_anonymous: true
+anonymous_role: public
+credentials:
+  - id: analyst-primary
+    token_sha256: "<64-character SHA-256 digest>"
+    user: alice@example.com
+    role: analyst
+    expires_at: "2027-01-01T00:00:00Z"
+```
+
+Run the generator again for every additional credential; never reuse one raw token across roles.
+Restart the API after changing `auth.yaml`, paste the raw token into the UI's **Access token** field,
+and confirm the effective server-side identity through `GET /session`. Leaving the field empty uses
+the configured anonymous `public` role.
+
+To rotate without an access gap, add and distribute a new credential first, restart the API, then
+set `disabled: true` on the old credential and restart again. A lost raw token cannot be recovered
+from its digest; issue a replacement. Never commit or store raw tokens in `auth.yaml`, `.env`, logs,
+or documentation. See [`auth.example.yaml`](auth.example.yaml) and the complete
+[`operator workflow`](docs/governance.md#凭据配置).
+
 Static bearer tokens are suitable for a local deployment or a service behind an identity-aware
 gateway. A direct multi-tenant deployment can set `ASKLAKE_AUTH_MODE=oidc` to validate asymmetric
 OIDC/JWT signatures through the provider JWKS, with pinned issuer/audience/algorithm, required

@@ -67,14 +67,22 @@ AskLake 的治理边界不是结果返回后的装饰性脱敏，而是位于认
 保存 SHA-256 摘要：
 
 ```bash
-cp auth.example.yaml auth.yaml
+test -f auth.yaml || cp auth.example.yaml auth.yaml
+chmod 600 auth.yaml
 uv run python -m engine.auth.static_token generate
 ```
 
-把摘要、稳定凭据 ID、用户标识、角色和轮换到期时间写入 `auth.yaml`。只接受版本 2 摘要
+命令会输出一次原始 `token` 和对应的 `token_sha256`。Token 本身不包含角色：将原始 Token
+通过密钥管理系统交给用户，只把摘要、稳定凭据 ID、用户标识、角色和轮换到期时间写入
+`auth.yaml`。每个用户或角色分别运行一次生成命令，不要跨角色复用 Token。配置示例见
+[`auth.example.yaml`](../auth.example.yaml)。
+
+只接受版本 2 摘要
 配置；旧版明文 token 会导致服务启动失败。凭据可通过 `disabled: true` 立即停用，到期凭据
 也会被拒绝。缺少凭据时是否允许匿名访问由 `allow_anonymous` 决定；一旦客户端发送了无效
-凭据，API 始终返回 401。
+凭据，API 始终返回 401。修改配置后需要重启 API；在 UI 的 **Access token** 输入原始 Token，
+或通过 `GET /session` 检查服务端解析出的有效用户和角色。原始 Token 丢失后无法从摘要恢复，
+应生成新凭据并停用旧凭据。
 
 静态 token 适用于本机部署或身份感知网关之后的服务。直接面向多租户网络时，设置
 `ASKLAKE_AUTH_MODE=oidc`：服务使用指定的 HTTPS JWKS 校验非对称 JWT，并固定 issuer、
