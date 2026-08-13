@@ -1,5 +1,10 @@
-# Copy to auth.yaml (gitignored) and replace the example tokens.
-# Each role MUST be one of the roles declared in datasets/<name>/governance.yaml.
-tokens:
-  replace-with-analyst-token: {user: alice, role: analyst}
-  replace-with-public-token: {user: viewer, role: public}
+# Copy to auth.yaml, generate a high-entropy token, then store only its SHA-256 digest here:
+#   uv run python -m engine.auth.static_token
+# The placeholder below is SHA-256("") and cannot authenticate because empty tokens are rejected.
+version: 2
+allow_anonymous: true
+anonymous_role: public
+credentials:
+  - token_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    user: replace-me
+    role: analyst

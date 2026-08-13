@@ -190,6 +190,13 @@ def _render_result(resp: dict) -> None:
             with st.expander("🕸️ Network view", expanded=False):
                 graph_viz.render_network(triples)
 
+    governance = resp.get("governance") or {}
+    notices = governance.get("notices") or []
+    if notices:
+        with st.expander("Data use and provenance", expanded=False):
+            for notice in notices:
+                st.caption(notice)
+
 
 def render() -> None:
     _init_state()

@@ -16,6 +16,7 @@ dependencies = [
     "pyyaml>=6",
     "prometheus-client>=0.20",
     "pyvis>=0.3.2",
+    "sqlglot>=27,<29",
 ]
 
 [project.optional-dependencies]

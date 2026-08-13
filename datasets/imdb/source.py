@@ -63,6 +63,7 @@ def build_parquet(
         f"""
         CREATE TABLE basics AS
         SELECT tconst, titleType, primaryTitle, originalTitle,
+               TRY_CAST(isAdult AS BOOLEAN) AS isAdult,
                TRY_CAST(startYear AS INTEGER) AS startYear,
                TRY_CAST(runtimeMinutes AS INTEGER) AS runtimeMinutes,
                genres

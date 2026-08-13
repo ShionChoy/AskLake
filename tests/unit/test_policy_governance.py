@@ -40,7 +40,7 @@ def test_before_query_allows_safe_select_with_limit():
 
 
 def test_before_query_blocks_missing_limit():
-    with pytest.raises(GovernanceError, match="guardrail"):
+    with pytest.raises(GovernanceError, match="LIMIT"):
         _gov().before_query("SELECT primaryName FROM people", role="public")
 
 
@@ -87,3 +87,27 @@ def test_load_policy_defaults_when_absent(tmp_path):
     pol = load_policy(p)
     assert pol.roles == ()
     assert pol.row_security == {}
+
+
+def test_version_two_yaml_role_defaults_grant_nothing(tmp_path):
+    path = tmp_path / "governance.yaml"
+    path.write_text("version: 2\nanonymous_role: public\nroles:\n  public: {}\n")
+    policy = load_policy(path)
+    assert not policy.allows_action("public", "ask")
+    assert policy.tables_for("public", {"movies"}) == frozenset()
+
+
+def test_version_two_yaml_rejects_wildcard_or_unclassified_grants(tmp_path):
+    path = tmp_path / "governance.yaml"
+    path.write_text(
+        "version: 2\nanonymous_role: public\nroles:\n  public: {actions: [ask], tables: ['*']}\n"
+    )
+    with pytest.raises(ValueError, match="must enumerate"):
+        load_policy(path)
+
+    path.write_text(
+        "version: 2\nanonymous_role: public\nroles:\n"
+        "  public: {actions: [ask], tables: [unclassified]}\n"
+    )
+    with pytest.raises(ValueError, match="unclassified tables"):
+        load_policy(path)

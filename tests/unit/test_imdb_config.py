@@ -18,10 +18,13 @@ def test_imdb_semantic_layer_parses():
 
 def test_imdb_governance_policy_parses():
     policy = load_policy(_GOV)
-    assert "birthYear" in policy.pii_columns
-    assert "public" in policy.mask_roles
-    assert policy.require_limit is True
-    assert policy.row_filters["public"][0].column == "titleType"
+    assert policy.version == 2
+    assert policy.default_effect == "deny"
+    assert policy.column_handling("public", "name_basics", "birthYear") == "mask"
+    assert policy.allows_action("public", "ask")
+    assert not policy.allows_action("public", "raw_sql")
+    assert policy.table_policies["title_basics"].classification.license == "imdb_noncommercial"
+    assert policy.graph_relations["HAS_THEME"].classification.integrity == "llm_inferred"
 
 
 def test_imdb_semantic_has_link_annotations():

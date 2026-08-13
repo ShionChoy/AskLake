@@ -54,6 +54,8 @@ class SqlPath:
             result = self._backend.run_sql(safe_sql)
             result = self._gov.after_result(result, role=self._role)
         except Exception as exc:  # noqa: BLE001 - graceful degradation, surfaced to caller
+            if getattr(exc, "status_code", None) == 403:
+                raise
             return RetrievalResult(
                 path=self.name,
                 sql=sql,

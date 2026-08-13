@@ -1,4 +1,6 @@
-from engine.auth.static_token import StaticTokenAuthenticator
+import pytest
+
+from engine.auth.static_token import AuthenticationError, StaticTokenAuthenticator, token_digest
 from engine.ports.auth import Authenticator, Principal
 
 
@@ -34,9 +36,10 @@ def test_known_token_maps_to_principal():
     assert _auth().authenticate("tok_a") == Principal("alice", "analyst")
 
 
-def test_unknown_or_missing_token_degrades_to_public():
+def test_unknown_token_is_rejected_but_missing_token_is_anonymous():
     a = _auth()
-    assert a.authenticate("nope") == Principal("anonymous", "public")
+    with pytest.raises(AuthenticationError, match="invalid"):
+        a.authenticate("nope")
     assert a.authenticate(None) == Principal("anonymous", "public")
     assert a.authenticate("") == Principal("anonymous", "public")
 
@@ -55,7 +58,21 @@ def test_from_yaml_round_trip(tmp_path):
     assert a.roles == {"analyst", "public"}
 
 
-def test_empty_map_degrades_everything_to_public():
+def test_version_two_config_uses_only_token_hashes(tmp_path):
+    p = tmp_path / "auth.yaml"
+    p.write_text(
+        "version: 2\n"
+        "credentials:\n"
+        f"  - {{token_sha256: {token_digest('tok_a')}, user: alice, role: analyst}}\n"
+    )
+    auth = StaticTokenAuthenticator.from_yaml(p)
+    assert auth.authenticate("tok_a") == Principal("alice", "analyst")
+    assert "tok_a" not in repr(auth.__dict__)
+
+
+def test_empty_map_allows_only_missing_credentials_as_public():
     a = StaticTokenAuthenticator({})
-    assert a.authenticate("anything") == Principal("anonymous", "public")
+    with pytest.raises(AuthenticationError):
+        a.authenticate("anything")
+    assert a.authenticate(None) == Principal("anonymous", "public")
     assert a.roles == set()

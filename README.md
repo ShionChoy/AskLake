@@ -13,8 +13,8 @@ AskLake answers plain-English questions through two grounded retrieval paths —
 - **GraphRAG second path** — intent-aware typed retrieval over a knowledge graph: an n-gram entity linker resolves the question's titles to graph nodes, an intent resolver shapes the traversal to what was actually asked (cast vs. director vs. shared themes vs. open multi-hop), and a degree-aware ranker keeps high-degree hubs from flooding the result. An optional grounded step turns the retrieved, citation-tagged triples into a natural-language answer. Handles plot/theme/relationship questions that pure SQL cannot.
 - **Interactive network view** — graph and fusion answers also render their triples as a draggable, zoomable pyvis network (relation-labeled edges, hubs sized by degree, source citations on hover) in a 🕸️ Network view expander beneath the table. Adjustable in-app: node size, layout spacing/density, and a freeze-layout toggle.
 - **Heuristic Router + Synthesizer** — routes structured questions to SQL, relational/narrative questions to the graph, and fuses both for cross-cutting queries.
-- **Governance hook** — RBAC, PII masking (`birthYear`/`deathYear` masked for `public` role), row-level filters (adult titles hidden), and query-cost guardrails (blocks unbounded scans and non-SELECT writes).
-- **Authenticated role-based access** — Bearer-token authentication; token→role mapping in `auth.yaml`; missing or invalid token degrades gracefully to the least-privilege `public` role (never a hard error). See *Access control & governance* below.
+- **Production governance boundary** — deny-by-default action/table/column/graph authorization, adult-content row filtering, public-person field masking, AST-validated read-only SQL, hard result caps, license obligations, and persistent privacy-preserving audit events.
+- **Authenticated role-based access** — high-entropy Bearer tokens map to roles through SHA-256 digests in `auth.yaml`; missing credentials use the explicit anonymous role, while malformed or invalid credentials return HTTP 401. See *Access control & governance* below.
 - **Observability** — `PrometheusObservability` records LLM-call latency, SQL errors, and storage spans; opt-in via `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` which also exposes a `/metrics` endpoint.
 - **Bring-your-own key in the browser** — paste an API key and pick the provider/model right in the UI sidebar, then optionally save it to a local `0600` file for next time (or delete it). Credentials are sent per request and **never persisted server-side**; the server boots fine with no key at all.
 - **Port-and-adapter engine** — 7 ports (`LLMProvider`, `StorageBackend`, `SchemaProvider`, `RetrievalPath`, `AgentGraph` nodes, `GovernanceHook`, `Observability`) keep every component swappable without touching existing adapters.
@@ -45,7 +45,7 @@ cp .env.example .env
 #   DEEPSEEK_API_KEY=sk-...
 ```
 
-Providing the key here is **optional** — you can instead paste it in the browser sidebar at runtime (and save it locally for next time). The API boots and serves `/query` even with no key configured; only LLM-powered questions need one, supplied either way.
+Providing the LLM key here is **optional** — you can instead paste it in the browser sidebar at runtime (and save it locally for next time). The API boots without one; only LLM-powered questions need it. Raw `/query` access separately requires an `analyst` or `steward` access token.
 
 ### 3. Download and build the data (one-time, ~1.8 GB)
 
@@ -124,27 +124,40 @@ A heuristic Router scores SQL-vs-graph features and dispatches to `SqlPath`, `Gr
 
 ### Access control & governance
 
-**Authentication** — the API accepts a `Bearer <token>` header on every request. Tokens map to
-roles via `auth.yaml` (copy from `auth.example.yaml`, add `ASKLAKE_AUTH_CONFIG=auth.yaml` to
-`.env`). A missing or invalid token degrades silently to the least-privilege `public` role — it
-never returns a 401 for anonymous callers. The Streamlit sidebar exposes a password-masked
-**Access token** field (separate from the LLM API key).
+Governance is enforced at the execution boundary from the versioned policy in
+`datasets/imdb/governance.yaml`:
 
-**Row-level security on the NL query path** — `public` callers see only the popular catalog
-(`numVotes >= 25000` on `title_ratings`); `analyst` callers see the full long-tail catalog. This
-is enforced via per-role DuckDB views (`rls_<role>`) selected per request — the role name never
-enters the LLM prompt. PII columns (`birthYear`, `deathYear`) are masked to `NULL` for the
-`public` role.
+- **Authentication** — Bearer tokens are stored as SHA-256 digests in `auth.yaml` (copy
+  `auth.example.yaml`; generate a digest with `uv run python -m engine.auth.static_token`). Missing
+  credentials use the explicitly configured anonymous role. A malformed or invalid credential is
+  rejected with HTTP 401; it never silently becomes an anonymous request.
+- **Deny-by-default authorization** — each role independently grants actions (`ask`, `raw_sql`,
+  `graph`, `export`), tables, columns, row predicates, graph relations, and result caps. `public`
+  can ask governed questions but cannot call the raw SQL endpoint; `analyst` can run bounded raw
+  queries; `steward` is the only role with the export capability.
+- **Non-bypassable SQL controls** — SQL is parsed into a DuckDB AST. Only one SELECT/set query is
+  accepted; writes, PRAGMA/EXPLAIN/COPY, external table functions, schema/catalog-qualified names,
+  unapproved tables, cross joins, excessive joins, and excessive response sizes are rejected.
+  Physical tables are rewritten to per-role views, not selected through mutable `search_path`, so
+  `main.table`, aliases, and concurrent cross-role requests cannot bypass row/column controls.
+- **Movie-appropriate classification** — IMDb catalog data is labelled public-source but
+  non-commercially licensed; person fields carry public-personal labels; `isAdult` is a content
+  label; Wikipedia-derived graph relations retain CC BY-SA obligations; LLM-extracted themes and
+  settings are marked inferred and require citations. Popularity (`numVotes`) remains a ranking
+  and quality signal, not a security classification.
+- **LLM and graph boundary** — denied/masked schema fields and value hints are removed before an
+  external model sees them. Graph relations are filtered and citations checked before graph facts
+  enter an answer-generation prompt.
+- **Audit and obligations** — allowed, denied, and failed decisions carry request IDs and are
+  emitted as structured JSON. Query text is hashed by default rather than logged; a rotating
+  owner-only JSONL sink is enabled with `ASKLAKE_AUDIT_PATH`. API responses expose applicable
+  license notices and policy version.
 
-**Raw SQL console** (`/query`) — read-only (all writes blocked) and LIMIT-required for every role;
-PII masking by role applies; the popular-catalog row filter (`numVotes >= 25000`) is a property of
-the NL path (`/ask_trace`), not the raw SQL console.
-
-**Audit** — a structured log line per query (timestamp / principal / role / path / decision) plus
-role×decision counters via the observability layer.
-
-**Deferred seams** — JWT/login UI, table-level RBAC, persistent audit store, graph-path
-governance.
+Static bearer tokens are suitable for a local deployment or a service behind an identity-aware
+gateway. A multi-tenant internet deployment should replace this authenticator through the existing
+`Authenticator` port with OIDC/JWT validation and ship audit events to an immutable external sink.
+The complete decision model and operator workflow are documented in
+[`docs/governance.md`](docs/governance.md).
 
 ---
 
@@ -212,7 +225,8 @@ make clean       # removes build artifacts and temporary files
 | `DEEPSEEK_API_KEY` | DeepSeek auth (default provider) |
 | `ANTHROPIC_API_KEY` + `ASKLAKE_LLM_PROVIDER=anthropic` | use Claude instead of DeepSeek |
 | `ASKLAKE_PARQUET_DIR` | built parquet location (default `data/imdb/parquet`) |
-| `ASKLAKE_AUTH_CONFIG` | path to `auth.yaml` token→role map; unset = all requests degrade to `public` |
+| `ASKLAKE_AUTH_CONFIG` | path to the hashed bearer-token→role configuration |
+| `ASKLAKE_AUDIT_PATH` | persistent JSONL audit path (query content is hashed by default) |
 | `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` | enable `/metrics` Prometheus exposition |
 | `ASKLAKE_GRAPH_BACKEND` | knowledge-graph backend: `memory` (default) or `neo4j` |
 | `NEO4J_URI` / `NEO4J_USER` / `NEO4J_PASSWORD` | Neo4j connection (when backend=neo4j) |

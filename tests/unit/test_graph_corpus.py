@@ -8,8 +8,9 @@ def _fixture_parquet(pq):
     con = duckdb.connect()
     con.execute(
         "COPY (SELECT * FROM (VALUES "
-        "('tt1','movie','The Matrix'),('tt2','movie','Inception')) "
-        f"v(tconst,titleType,primaryTitle)) TO '{pq}/title_basics.parquet' (FORMAT PARQUET)"
+        "('tt1','movie','The Matrix',false),('tt2','movie','Inception',false)) "
+        f"v(tconst,titleType,primaryTitle,isAdult)) TO '{pq}/title_basics.parquet' "
+        "(FORMAT PARQUET)"
     )
     con.execute(
         "COPY (SELECT * FROM (VALUES ('tt1',2000000),('tt2',2400000)) "

@@ -52,7 +52,8 @@ def select_plot_docs(
     backend = DuckDBBackend(parquet_dir=parquet_dir)
     res = backend.run_sql(
         f"SELECT b.tconst, b.primaryTitle FROM title_basics b JOIN title_ratings r USING(tconst) "
-        f"WHERE b.titleType='movie' ORDER BY r.numVotes DESC LIMIT {int(max_films)}"
+        f"WHERE b.titleType='movie' AND NOT COALESCE(b.isAdult, false) "
+        f"ORDER BY r.numVotes DESC LIMIT {int(max_films)}"
     )
     ranked = [(tconst, title) for tconst, title in res.rows]
     titles = wiki.resolve([t for t, _ in ranked])

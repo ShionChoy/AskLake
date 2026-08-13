@@ -105,6 +105,8 @@ def build_grounded_sql_graph(
             try:
                 executed.append((sql, executor(sql)))
             except Exception as exc:  # noqa: BLE001 - feeds the correction loop
+                if getattr(exc, "status_code", None) == 403:
+                    raise
                 last_error = str(exc)
         if not executed:
             return {"sql": cands[0], "result": None, "error": last_error}

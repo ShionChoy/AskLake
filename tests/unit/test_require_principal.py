@@ -28,13 +28,13 @@ def test_no_header_degrades_to_public():
     assert out == {"user": "anonymous", "role": "public"}
 
 
-def test_unknown_token_degrades_to_public():
+def test_unknown_token_returns_401():
     c = TestClient(_app())
-    out = c.get("/whoami", headers={"Authorization": "Bearer nope"}).json()
-    assert out == {"user": "anonymous", "role": "public"}
+    response = c.get("/whoami", headers={"Authorization": "Bearer nope"})
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
 
 
-def test_non_bearer_header_degrades_to_public():
+def test_non_bearer_header_returns_401():
     c = TestClient(_app())
-    out = c.get("/whoami", headers={"Authorization": "Basic tok_a"}).json()
-    assert out == {"user": "anonymous", "role": "public"}
+    assert c.get("/whoami", headers={"Authorization": "Basic tok_a"}).status_code == 401

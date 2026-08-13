@@ -1,18 +1,113 @@
-# IMDb governance policy; PolicyGovernance enforces this per-dataset configuration.
+version: 2
+default_effect: deny
+anonymous_role: public
+
+# Roles grant operations, not arbitrary "sensitivity levels". IMDb popularity is a quality and
+# ranking signal; it is deliberately not used as an authorization boundary.
 roles:
-  analyst: {pii: allow}   # internal role: full access
-  public:  {pii: mask}    # external role: PII masked, restricted rows hidden
-pii_columns: [birthYear, deathYear]
-row_filters:
   public:
-    - {column: titleType, deny_values: [adult]}
-row_security:                     # per-role row-level predicates (applied as view WHERE clauses)
-  public:
-    title_ratings: "numVotes >= 25000"
-    title_basics:  "tconst IN (SELECT tconst FROM main.title_ratings WHERE numVotes >= 25000)"
-    title_crew:    "tconst IN (SELECT tconst FROM main.title_ratings WHERE numVotes >= 25000)"
-    title_principals: "tconst IN (SELECT tconst FROM main.title_ratings WHERE numVotes >= 25000)"
-    name_basics:   "nconst IN (SELECT nconst FROM main.title_principals WHERE tconst IN (SELECT tconst FROM main.title_ratings WHERE numVotes >= 25000))"
-cost_guardrail:
-  require_limit: true     # reject unbounded scans (no LIMIT)
-  forbid_writes: true     # reject anything but a single read-only SELECT
+    actions: [ask, graph]
+    tables: [title_basics, title_ratings, title_crew, title_principals, name_basics]
+    columns:
+      title_basics.isAdult: deny
+      name_basics.birthYear: mask
+      name_basics.deathYear: mask
+    row_security:
+      title_basics: "NOT COALESCE(isAdult, false)"
+      title_ratings: >-
+        tconst IN (SELECT tconst FROM main.title_basics
+        WHERE NOT COALESCE(isAdult, false))
+      title_crew: >-
+        tconst IN (SELECT tconst FROM main.title_basics
+        WHERE NOT COALESCE(isAdult, false))
+      title_principals: >-
+        tconst IN (SELECT tconst FROM main.title_basics
+        WHERE NOT COALESCE(isAdult, false))
+      name_basics: >-
+        nconst IN (SELECT nconst FROM main.title_principals
+        WHERE tconst IN (SELECT tconst FROM main.title_basics
+        WHERE NOT COALESCE(isAdult, false)))
+    graph_relations: [HAS_THEME, DIRECTED_BY, FEATURES_CHARACTER, SET_IN, HAS_GENRE, RELEASED_IN, PLAYED_BY, ACTED_IN]
+    max_rows: 100
+    max_graph_triples: 50
+
+  analyst:
+    actions: [ask, raw_sql, graph]
+    tables: [title_basics, title_ratings, title_crew, title_principals, name_basics]
+    graph_relations: [HAS_THEME, DIRECTED_BY, FEATURES_CHARACTER, SET_IN, HAS_GENRE, RELEASED_IN, PLAYED_BY, ACTED_IN]
+    max_rows: 500
+    max_graph_triples: 200
+
+  steward:
+    actions: [ask, raw_sql, graph, export]
+    tables: [title_basics, title_ratings, title_crew, title_principals, name_basics]
+    graph_relations: [HAS_THEME, DIRECTED_BY, FEATURES_CHARACTER, SET_IN, HAS_GENRE, RELEASED_IN, PLAYED_BY, ACTED_IN]
+    max_rows: 2000
+    max_graph_triples: 200
+
+data:
+  tables:
+    title_basics:
+      classification:
+        confidentiality: public_source
+        license: imdb_noncommercial
+        privacy: none
+        integrity: source_fact
+      columns:
+        isAdult: {content: adult_flag}
+    title_ratings:
+      classification:
+        confidentiality: public_source
+        license: imdb_noncommercial
+        privacy: none
+        integrity: source_fact
+    title_crew:
+      classification:
+        confidentiality: public_source
+        license: imdb_noncommercial
+        privacy: public_personal
+        integrity: source_fact
+    title_principals:
+      classification:
+        confidentiality: public_source
+        license: imdb_noncommercial
+        privacy: public_personal
+        integrity: source_fact
+    name_basics:
+      classification:
+        confidentiality: public_source
+        license: imdb_noncommercial
+        privacy: public_personal
+        integrity: source_fact
+      columns:
+        primaryName: {privacy: public_personal}
+        birthYear: {privacy: public_personal}
+        deathYear: {privacy: public_personal}
+
+query_guardrails:
+  max_length: 20000
+  max_tables: 8
+  max_joins: 7
+  max_rows: 500
+  require_limit: false
+  forbid_cross_join: true
+
+graph:
+  default_effect: deny
+  relations:
+    HAS_GENRE:          {classification: {license: imdb_noncommercial, integrity: source_fact}}
+    RELEASED_IN:        {classification: {license: imdb_noncommercial, integrity: source_fact}}
+    DIRECTED_BY:        {classification: {license: imdb_noncommercial, privacy: public_personal, integrity: source_fact}}
+    ACTED_IN:           {classification: {license: imdb_noncommercial, privacy: public_personal, integrity: source_fact}}
+    FEATURES_CHARACTER: {classification: {license: imdb_noncommercial, integrity: source_fact}}
+    PLAYED_BY:          {classification: {license: imdb_noncommercial, privacy: public_personal, integrity: source_fact}}
+    HAS_THEME:          {classification: {license: wikipedia_cc_by_sa_4, integrity: llm_inferred}, citation_required: true}
+    SET_IN:             {classification: {license: wikipedia_cc_by_sa_4, integrity: llm_inferred}, citation_required: true}
+
+licenses:
+  imdb_noncommercial: >-
+    IMDb dataset use is limited to personal and non-commercial purposes and remains subject to
+    IMDb's license terms; bulk redistribution is not provided by this service.
+  wikipedia_cc_by_sa_4: >-
+    Wikipedia-derived text and facts retain source citations; reuse must satisfy the applicable
+    CC BY-SA attribution and share-alike requirements.

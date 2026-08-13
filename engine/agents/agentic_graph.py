@@ -56,6 +56,8 @@ def build_agentic_sql_graph(
         try:
             result = executor(state["sql"])
         except Exception as exc:  # noqa: BLE001 - the error feeds the self-correct loop
+            if getattr(exc, "status_code", None) == 403:
+                raise
             return {"error": str(exc)}
         return {"result": result, "error": ""}
 

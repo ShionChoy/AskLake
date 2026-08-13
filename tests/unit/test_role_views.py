@@ -1,4 +1,6 @@
-from engine.governance.policy import Policy
+import pytest
+
+from engine.governance.policy import GovernanceConfigurationError, Policy
 from engine.governance.views import build_role_views
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 
@@ -49,46 +51,41 @@ def test_build_is_idempotent():
     assert b.run_sql("SELECT count(*) FROM title_ratings").rows == [(1,)]
 
 
-def test_predicate_referencing_missing_table_falls_back_to_passthrough():
-    # public predicate on title_basics references main.title_ratings, which is ABSENT here.
-    # build_role_views must not raise at boot: it falls back to a pass-through view.
+def test_predicate_referencing_missing_table_fails_closed():
     b = DuckDBBackend()
     b.setup("CREATE TABLE title_basics AS SELECT * FROM (VALUES ('tt1'),('tt2')) v(tconst);")
-    build_role_views(
-        b,
-        Policy(
-            roles=("public",),
-            row_security={
-                "public": {
-                    "title_basics": "tconst IN (SELECT tconst FROM main.title_ratings "
-                    "WHERE numVotes >= 25000)"
-                }
-            },
-        ),
-    )
-    b.run_sql("SET search_path='rls_public'")
-    assert {r[0] for r in b.run_sql("SELECT tconst FROM title_basics").rows} == {"tt1", "tt2"}
+    with pytest.raises(GovernanceConfigurationError):
+        build_role_views(
+            b,
+            Policy(
+                roles=("public",),
+                row_security={
+                    "public": {
+                        "title_basics": "tconst IN (SELECT tconst FROM main.title_ratings "
+                        "WHERE numVotes >= 25000)"
+                    }
+                },
+            ),
+        )
 
 
-def test_passthrough_fallback_still_masks_pii():
-    # When a predicate can't bind (references an absent table) the view falls back to
-    # pass-through, but PII redaction (NULL) must STILL apply.
+def test_invalid_masked_view_predicate_still_fails_closed():
     b = DuckDBBackend()
     b.setup(
         "CREATE TABLE name_basics AS SELECT * FROM (VALUES "
         "('nm1','Nolan',1970)) v(nconst, primaryName, birthYear);"
     )
-    build_role_views(
-        b,
-        Policy(
-            roles=("public",),
-            pii_columns=("birthYear",),
-            mask_roles=("public",),
-            row_security={
-                "public": {"name_basics": "nconst IN (SELECT nconst FROM main.title_principals)"}
-            },  # title_principals ABSENT
-        ),
-    )
-    b.run_sql("SET search_path='rls_public'")
-    # birthYear must be NULL (masked) even though the row predicate fell back to pass-through
-    assert b.run_sql("SELECT birthYear FROM name_basics").rows == [(None,)]
+    with pytest.raises(GovernanceConfigurationError):
+        build_role_views(
+            b,
+            Policy(
+                roles=("public",),
+                pii_columns=("birthYear",),
+                mask_roles=("public",),
+                row_security={
+                    "public": {
+                        "name_basics": "nconst IN (SELECT nconst FROM main.title_principals)"
+                    }
+                },
+            ),
+        )

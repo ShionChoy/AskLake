@@ -6,6 +6,7 @@ tables:
       - {name: tconst, description: Title id; joins to title_ratings and title_crew.}
       - {name: titleType, link: categorical, description: "Kind of title: 'movie', 'tvSeries', or 'tvMovie'. Filter titleType='movie' for films."}
       - {name: primaryTitle, description: The film's display title.}
+      - {name: isAdult, type: BOOLEAN, description: IMDb adult-content flag; governed as content metadata.}
       - {name: startYear, type: INTEGER, description: Release year.}
       - {name: genres, description: Comma-separated genres, e.g. "Sci-Fi,Drama"., link: categorical}
   - name: title_ratings
