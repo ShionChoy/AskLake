@@ -16,10 +16,16 @@ API_URL = os.environ.get("ASKLAKE_API_URL", "http://localhost:8000")
 PROVIDERS = ["deepseek", "anthropic"]
 DEFAULT_MODELS = {
     "deepseek": ["deepseek-v4-flash", "deepseek-v4-pro"],
-    "anthropic": ["claude-sonnet-4-6", "claude-opus-4-8", "claude-haiku-4-5"],
+    "anthropic": [
+        "claude-sonnet-5",
+        "claude-opus-5",
+        "claude-fable-5",
+        "claude-haiku-4-5",
+    ],
 }
 _CUSTOM = "(custom…)"
 PATHS = ["auto", "sql", "graph", "fusion"]
+_RETIRED_MODELS = {"deepseek-chat", "deepseek-reasoner"}
 
 
 class ApiError(RuntimeError):
@@ -159,14 +165,42 @@ def _render_governance(governance: dict) -> None:
 
 
 def _init_state() -> None:
-    if st.session_state.get("creds_loaded"):
-        return
-    saved = credentials.load()
-    st.session_state.provider = saved.get("provider", "deepseek")
-    st.session_state.model = saved.get("model", DEFAULT_MODELS["deepseek"][0])
-    st.session_state.api_key = saved.get("api_key", "")
-    st.session_state.access_token = saved.get("access_token", "")
-    st.session_state.creds_loaded = True
+    if not st.session_state.get("creds_loaded"):
+        saved = credentials.load()
+        provider = saved.get("provider", "deepseek")
+        if provider not in PROVIDERS:
+            provider = "deepseek"
+        model = saved.get("model", DEFAULT_MODELS[provider][0])
+        if model in _RETIRED_MODELS:
+            model = DEFAULT_MODELS[provider][0]
+        st.session_state.provider = provider
+        st.session_state.model = model
+        st.session_state.api_key = saved.get("api_key", "")
+        st.session_state.access_token = saved.get("access_token", "")
+        st.session_state.creds_loaded = True
+
+    provider = st.session_state.get("provider", "deepseek")
+    if provider not in PROVIDERS:
+        provider = "deepseek"
+        st.session_state.provider = provider
+    model = st.session_state.get("model", DEFAULT_MODELS[provider][0])
+    options = DEFAULT_MODELS[provider] + [_CUSTOM]
+    st.session_state.setdefault("provider_choice", provider)
+    if st.session_state.get("model_choice") not in options:
+        st.session_state.model_choice = model if model in options else _CUSTOM
+    if model not in DEFAULT_MODELS[provider]:
+        st.session_state.custom_model = model
+    else:
+        st.session_state.setdefault("custom_model", "")
+
+
+def _provider_changed() -> None:
+    provider = st.session_state.provider_choice
+    default = DEFAULT_MODELS[provider][0]
+    st.session_state.provider = provider
+    st.session_state.model_choice = default
+    st.session_state.model = default
+    st.session_state.custom_model = ""
 
 
 def _sidebar() -> dict | None:
@@ -228,20 +262,18 @@ def _sidebar() -> dict | None:
     st.sidebar.markdown("---")
     st.sidebar.header("⚙️ Model & API key")
 
-    _saved_provider = st.session_state.get("provider", "deepseek")
     provider = st.sidebar.selectbox(
         "Provider",
         PROVIDERS,
-        index=PROVIDERS.index(_saved_provider) if _saved_provider in PROVIDERS else 0,
+        key="provider_choice",
+        on_change=_provider_changed,
     )
     st.session_state.provider = provider
 
     options = DEFAULT_MODELS[provider] + [_CUSTOM]
-    current = st.session_state.get("model", options[0])
-    index = options.index(current) if current in options else len(options) - 1
-    choice = st.sidebar.selectbox("Model", options, index=index)
+    choice = st.sidebar.selectbox("Model", options, key="model_choice")
     if choice == _CUSTOM:
-        model = st.sidebar.text_input("Custom model", value="" if current in options else current)
+        model = st.sidebar.text_input("Custom model", key="custom_model")
     else:
         model = choice
     st.session_state.model = model

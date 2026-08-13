@@ -31,10 +31,10 @@ class FakeClient:
 
 def test_anthropic_provider_satisfies_protocol_and_returns_text():
     client = FakeClient()
-    provider = AnthropicProvider(model="claude-sonnet-4-6", client=client)
+    provider = AnthropicProvider(model="claude-sonnet-5", client=client)
     assert isinstance(provider, LLMProvider)
     out = provider.complete("hi", system="sys")
     assert out == "SELECT 1"
-    assert client.last_kwargs["model"] == "claude-sonnet-4-6"
+    assert client.last_kwargs["model"] == "claude-sonnet-5"
     assert client.last_kwargs["system"] == "sys"
     assert client.last_kwargs["messages"][0]["content"] == "hi"

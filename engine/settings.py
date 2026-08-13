@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ASKLAKE_", env_file=".env", extra="ignore")
 
     llm_provider: str = "anthropic"
-    llm_model: str = "claude-sonnet-4-6"
+    llm_model: str = "claude-sonnet-5"
     parquet_dir: str | None = None
     observability_backend: str = "noop"  # "noop" | "prometheus"
     api_host: str = "0.0.0.0"

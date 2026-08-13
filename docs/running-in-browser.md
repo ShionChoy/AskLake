@@ -171,8 +171,9 @@ curl -s localhost:8000/info | uv run python -m json.tool
 The left sidebar is where you bring your own key:
 
 - **Provider** — `deepseek` or `anthropic`.
-- **Model** — pick from the provider's defaults (e.g. `deepseek-v4-flash`, `deepseek-v4-pro`) or
-  choose **(custom…)** to type any model name.
+- **Model** — DeepSeek offers `deepseek-v4-flash` (default) and `deepseek-v4-pro`; Anthropic offers
+  `claude-sonnet-5`, `claude-opus-5`, `claude-fable-5`, and `claude-haiku-4-5`. Choose
+  **(custom…)** to type another model name.
 - **API key** — paste your key (the field is masked).
 - **Save locally** — writes `~/.config/asklake/credentials.json` (mode `0600`, on your machine
   only). Next launch, the sidebar pre-fills from it.

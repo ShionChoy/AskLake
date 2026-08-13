@@ -3,7 +3,7 @@ import json
 import pytest
 import requests
 
-from ui.app import ApiError, _ask_body, _creds_payload, _response_json
+from ui.app import DEFAULT_MODELS, ApiError, _ask_body, _creds_payload, _response_json
 
 
 def test_creds_payload_omits_empty_fields():
@@ -12,7 +12,7 @@ def test_creds_payload_omits_empty_fields():
 
 
 def test_creds_payload_keeps_all_set_fields():
-    state = {"provider": "anthropic", "model": "claude-opus-4-8", "api_key": "sk-Y"}
+    state = {"provider": "anthropic", "model": "claude-opus-5", "api_key": "sk-Y"}
     assert _creds_payload(state) == state
 
 
@@ -32,6 +32,16 @@ def test_ask_body_includes_question_path_and_creds():
 
 def test_ask_body_defaults_path_to_auto():
     assert _ask_body("hi", {})["path"] == "auto"
+
+
+def test_model_picker_uses_current_provider_models_and_defaults_to_flash():
+    assert DEFAULT_MODELS["deepseek"] == ["deepseek-v4-flash", "deepseek-v4-pro"]
+    assert DEFAULT_MODELS["anthropic"] == [
+        "claude-sonnet-5",
+        "claude-opus-5",
+        "claude-fable-5",
+        "claude-haiku-4-5",
+    ]
 
 
 def test_auth_headers_builds_bearer_when_token_present():
