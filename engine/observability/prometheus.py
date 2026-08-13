@@ -8,7 +8,7 @@ from prometheus_client import CollectorRegistry, Counter, Histogram, generate_la
 
 
 class PrometheusObservability:
-    """Observability adapter backed by prometheus_client (P5; fills the no-op P0 seam).
+    """Observability adapter backed by prometheus_client.
 
     Uses an *injected* CollectorRegistry so it is hermetic and unit-testable: no global
     registry state, no Prometheus server required. Scrape via `exposition()` (what the

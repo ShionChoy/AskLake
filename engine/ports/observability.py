@@ -7,7 +7,7 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class Observability(Protocol):
-    """Metrics/trace seam. No-op (P0) -> Prometheus (P5)."""
+    """Metrics and tracing interface implemented by no-op and Prometheus adapters."""
 
     @contextmanager
     def span(self, name: str, **attrs) -> Iterator[None]: ...

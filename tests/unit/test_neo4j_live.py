@@ -25,7 +25,7 @@ FIXTURE = [
 ]
 
 # All entity names this test writes; deleted in teardown so the test is self-contained.
-# NEO4J_TEST_URI must point at a dedicated/ephemeral dev Neo4j (e.g. `make graph-up`), never a
+# NEO4J_TEST_URI must point at a dedicated or ephemeral development Neo4j instance, never a
 # shared/production graph — teardown deletes these names unconditionally.
 FIXTURE_NAMES = sorted({n for s, _r, o, _src in FIXTURE for n in (s, o)})
 
@@ -59,7 +59,7 @@ def test_entity_lookup_live():
     try:
         r = Neo4jGraphRetriever(
             store,
-            IntentResolver(load_ontology("datasets/imdb_cmu/graph/ontology.yaml")),
+            IntentResolver(load_ontology("datasets/imdb/graph/ontology.yaml")),
             attribute_relations=frozenset({"HAS_GENRE", "RELEASED_IN"}),
             connective_relations=frozenset({"HAS_THEME"}),
             relation_roles=ROLES,

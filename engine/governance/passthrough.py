@@ -5,7 +5,7 @@ from engine.ports.storage import QueryResult
 
 
 class PassthroughGovernance:
-    """No-op governance: returns inputs unchanged. Replaced in P3."""
+    """No-op governance adapter that returns inputs unchanged."""
 
     def before_query(self, sql: str, role: str) -> str:
         return sql

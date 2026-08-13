@@ -1,4 +1,4 @@
-from datasets.crm_demo.source import build_parquet
+from datasets.crm.source import build_parquet
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 
 

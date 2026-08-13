@@ -1,6 +1,6 @@
 import duckdb
 
-from datasets.imdb_cmu.graph_structured import structured_triples
+from datasets.imdb.graph_structured import structured_triples
 
 
 def _fixture_parquet(pq):

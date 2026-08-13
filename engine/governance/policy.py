@@ -68,8 +68,9 @@ def load_policy(path: str | Path) -> Policy:
 
 
 class PolicyGovernance:
-    """GovernanceHook (P3): config-driven RBAC / PII / cost guardrails. Additive sibling of
-    PassthroughGovernance (P0).
+    """Config-driven RBAC, PII, and cost guardrails.
+
+    Additive sibling of PassthroughGovernance.
 
     before_query -> safety + cost guardrail (raises GovernanceError to block).
     after_result -> row-level filtering + column-level PII masking, by role.

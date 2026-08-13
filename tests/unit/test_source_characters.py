@@ -2,7 +2,7 @@ import gzip
 
 import duckdb
 
-from datasets.imdb_cmu.source import build_parquet
+from datasets.imdb.source import build_parquet
 
 
 def _raw(raw_dir):

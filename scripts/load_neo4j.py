@@ -12,7 +12,7 @@ from engine.graph.ontology import load_ontology
 from engine.graph.persistence import iter_triples
 
 GRAPH_PATH = os.environ.get("ASKLAKE_GRAPH_PATH", "data/imdb/graph/triples.jsonl")
-ONTOLOGY_YAML = os.environ.get("ASKLAKE_ONTOLOGY", "datasets/imdb_cmu/graph/ontology.yaml")
+ONTOLOGY_YAML = os.environ.get("ASKLAKE_ONTOLOGY", "datasets/imdb/graph/ontology.yaml")
 
 
 def main() -> None:

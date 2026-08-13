@@ -68,8 +68,7 @@ class RetrievedSubgraph:
 
 @runtime_checkable
 class SeedProvider(Protocol):
-    """Maps a question to seed entity names. LexicalSeedProvider ships now;
-    EmbeddingSeedProvider (Phase 2) plugs into the same seam."""
+    """Map a question to seed entity names; alternative providers can use the same seam."""
 
     def seeds(self, question: str) -> list[str]: ...
 

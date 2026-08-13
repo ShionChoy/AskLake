@@ -33,7 +33,7 @@ from eval.systems import (
     run_value_link,
 )
 
-_SEMANTIC_YAML = "datasets/imdb_cmu/semantic.yaml"
+_SEMANTIC_YAML = "datasets/imdb/semantic.yaml"
 
 
 def apply_duckdb_guardrails(
@@ -121,7 +121,7 @@ def run_ablation_eval(
     failing case (1 retry) is scored 0 rather than aborting the run (matches run_real_eval)."""
     # Each rung adds one capability over the previous. Two steps are compound by design (they
     # match coherent system boundaries, not strict single-variable ablation): "+semantic" bundles
-    # self-correction + semantic-layer grounding (the P2 system), and "+plan/sc" bundles Planner
+    # self-correction + semantic-layer grounding, and "+plan/sc" bundles Planner
     # decomposition + K-candidate self-consistency. "+value-link" and "grounded" are single-step.
     runners = {
         "baseline": lambda c, m: run_baseline(m, backend, c.question),
@@ -190,7 +190,7 @@ def eval_dataset_config(name: str) -> dict:
 
         return {
             "parquet_dir": PARQUET_DIR,
-            "semantic_yaml": "datasets/crm_demo/semantic.yaml",
+            "semantic_yaml": "datasets/crm/semantic.yaml",
             "gold": lambda: CRM_GOLD,
         }
     from eval.imdb_gold import IMDB_GOLD

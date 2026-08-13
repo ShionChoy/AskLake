@@ -7,8 +7,8 @@ from scripts.build_graph import build_and_save
 
 def test_build_and_save_writes_triples(tmp_path):
     docs = [
-        PlotDoc(id="cmu:1", title="The Dark Knight", text="Batman vs the Joker."),
-        PlotDoc(id="cmu:2", title="Inception", text="A thief in dreams."),
+        PlotDoc(id="wiki:1", title="The Dark Knight", text="Batman vs the Joker."),
+        PlotDoc(id="wiki:2", title="Inception", text="A thief in dreams."),
     ]
     ontology = GraphOntology(
         entity_types=("Film", "Person", "Theme"),
@@ -25,7 +25,7 @@ def test_build_and_save_writes_triples(tmp_path):
     store = load_store(out)
     assert "Christopher Nolan" in store.entities()
     rows = [(t.subject, t.relation, t.obj, t.source) for t in store.triples()]
-    assert ("The Dark Knight", "HAS_THEME", "chaos", "cmu:1") in rows
+    assert ("The Dark Knight", "HAS_THEME", "chaos", "wiki:1") in rows
 
 
 def test_build_and_save_parallel_writes_structured_then_themes(tmp_path):
@@ -33,15 +33,15 @@ def test_build_and_save_parallel_writes_structured_then_themes(tmp_path):
     from scripts.build_graph import build_and_save_parallel
 
     docs = [
-        PlotDoc(id="cmu:1", title="The Dark Knight", text="Batman vs the Joker."),
-        PlotDoc(id="cmu:2", title="Inception", text="A thief in dreams."),
+        PlotDoc(id="wiki:1", title="The Dark Knight", text="Batman vs the Joker."),
+        PlotDoc(id="wiki:2", title="Inception", text="A thief in dreams."),
     ]
     ontology = GraphOntology(relation_types=("HAS_THEME",), hint="themes")
     extraction = [
         "The Dark Knight | HAS_THEME | chaos\n",
         "Inception | HAS_THEME | dreams\n",
     ]
-    structured = [Triple("The Dark Knight", "HAS_GENRE", "Action", "cmu:1")]
+    structured = [Triple("The Dark Knight", "HAS_GENRE", "Action", "wiki:1")]
     out = tmp_path / "triples.jsonl"
     count = build_and_save_parallel(
         structured, docs, FakeLLMProvider(extraction), ontology, out, workers=2
@@ -56,7 +56,7 @@ def test_theme_ontology_restricts_to_theme_and_setting():
     from engine.graph.ontology import load_ontology
     from scripts.build_graph import theme_ontology
 
-    full = load_ontology("datasets/imdb_cmu/graph/ontology.yaml")
+    full = load_ontology("datasets/imdb/graph/ontology.yaml")
     restricted = theme_ontology(full)
     assert set(restricted.relation_types) == {"HAS_THEME", "SET_IN"}
 
@@ -67,7 +67,7 @@ def test_theme_extraction_drops_structured_relations():
     from engine.llm.fake import FakeLLMProvider
     from scripts.build_graph import theme_ontology
 
-    restricted = theme_ontology(load_ontology("datasets/imdb_cmu/graph/ontology.yaml"))
+    restricted = theme_ontology(load_ontology("datasets/imdb/graph/ontology.yaml"))
     # canned LLM output mixing a theme, a director, and a setting
     llm = FakeLLMProvider(
         responses=["X | HAS_THEME | chaos\nX | DIRECTED_BY | Someone\nX | SET_IN | Gotham\n"]

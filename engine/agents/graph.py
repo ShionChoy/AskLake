@@ -31,7 +31,7 @@ def extract_sql(text: str) -> str:
 
 
 def build_sql_graph(llm: LLMProvider, schema_provider: SchemaProvider):
-    """Single-node graph (P1). P2 adds Planner/Validator/SelfCorrect nodes additively."""
+    """Single-node SQL-generation graph used by the evaluation baseline."""
 
     def generate_sql(state: GraphState) -> GraphState:
         question = state["question"]

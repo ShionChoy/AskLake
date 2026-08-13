@@ -5,7 +5,7 @@ from engine.ports.storage import StorageBackend
 
 class RawSchemaProvider:
     """Bare schema context: every table + columns from backend introspection.
-    Ignores the question (no retrieval). Replaced by SemanticLayerProvider in P3."""
+    Ignores the question and remains available as the evaluation baseline."""
 
     def __init__(self, backend: StorageBackend):
         self._backend = backend

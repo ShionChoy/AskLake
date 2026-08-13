@@ -7,9 +7,11 @@ from engine.semantic.semantic_model import SemanticLayer, load_semantic_layer
 
 
 class SemanticLayerProvider:
-    """SchemaProvider (P3): grounds the LLM with a curated semantic layer (table/column
-    descriptions, metrics, synonyms, few-shot examples), pruned to the question by a pluggable
-    SchemaRetriever. Additive sibling of RawSchemaProvider (P1, kept as the eval baseline)."""
+    """Ground the LLM with semantic descriptions, metrics, synonyms, and few-shot examples.
+
+    Context is pruned to the question via a pluggable SchemaRetriever. RawSchemaProvider remains
+    available as the evaluation baseline.
+    """
 
     def __init__(self, layer: SemanticLayer, retriever: SchemaRetriever | None = None):
         self._layer = layer

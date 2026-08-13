@@ -1,7 +1,7 @@
 """LexicalEntityLinker: links a question to seed entities by matching the question's contiguous
 word-spans against entity names (exact normalized match), scored by span length, with maximal-span
 dedup and a content-token guard. Implements the SeedProvider seam (engine/graph/retriever.py).
-The embedding-based linker (Phase 2) plugs into the same seam."""
+An embedding-based linker can plug into the same seam."""
 
 from __future__ import annotations
 

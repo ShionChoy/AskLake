@@ -64,6 +64,6 @@ def run_semantic_comparison() -> tuple[SystemReport, SystemReport]:
             FakeLLMProvider(responses=_SEMANTIC[case.name]), backend, case.question, _LAYER
         )
 
-    raw = evaluate("raw schema (P2)", _CASES, raw_one)
-    semantic = evaluate("semantic layer (P3)", _CASES, semantic_one)
+    raw = evaluate("raw schema", _CASES, raw_one)
+    semantic = evaluate("semantic layer", _CASES, semantic_one)
     return raw, semantic

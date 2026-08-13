@@ -19,7 +19,7 @@ def test_load_ontology_reads_attribute_relations(tmp_path):
 
 
 def test_imdb_ontology_declares_attribute_relations():
-    ont = load_ontology("datasets/imdb_cmu/graph/ontology.yaml")
+    ont = load_ontology("datasets/imdb/graph/ontology.yaml")
     assert set(ont.attribute_relations) == {
         "HAS_GENRE",
         "RELEASED_IN",
@@ -37,6 +37,6 @@ def test_load_ontology_reads_empty_graph_hint(tmp_path):
 
 
 def test_imdb_ontology_has_empty_graph_hint():
-    ont = load_ontology("datasets/imdb_cmu/graph/ontology.yaml")
+    ont = load_ontology("datasets/imdb/graph/ontology.yaml")
     assert ont.empty_graph_hint
     assert "knowledge graph" in ont.empty_graph_hint.lower()

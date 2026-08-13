@@ -4,8 +4,8 @@ from engine.governance.policy import load_policy
 from engine.semantic.semantic_model import load_semantic_layer
 
 _ROOT = Path(__file__).resolve().parents[2]
-_SEMANTIC = _ROOT / "datasets" / "imdb_cmu" / "semantic.yaml"
-_GOV = _ROOT / "datasets" / "imdb_cmu" / "governance.yaml"
+_SEMANTIC = _ROOT / "datasets" / "imdb" / "semantic.yaml"
+_GOV = _ROOT / "datasets" / "imdb" / "governance.yaml"
 
 
 def test_imdb_semantic_layer_parses():
@@ -27,7 +27,7 @@ def test_imdb_governance_policy_parses():
 def test_imdb_semantic_has_link_annotations():
     from engine.semantic.semantic_model import load_semantic_layer
 
-    layer = load_semantic_layer("datasets/imdb_cmu/semantic.yaml")
+    layer = load_semantic_layer("datasets/imdb/semantic.yaml")
     links = {c.name: c.link for t in layer.tables for c in t.columns if c.link}
     assert links.get("genres") == "categorical"
     assert links.get("category") == "categorical"

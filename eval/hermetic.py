@@ -1,4 +1,4 @@
-"""Offline, deterministic eval demonstration for CI and `make eval`.
+"""Offline, deterministic evaluation comparison for CI and `make eval`.
 
 FakeLLMProvider with canned per-case outputs so baseline-vs-agentic runs with NO API key. The
 baseline gets `top_rated` wrong (a non-existent `rating` column); the agentic system gets the same

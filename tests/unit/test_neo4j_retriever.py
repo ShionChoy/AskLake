@@ -9,7 +9,7 @@ _ROLES = {"HAS_GENRE": {"object": "Genre"}, "RELEASED_IN": {"object": "Year"}}
 
 
 def _resolver():
-    return IntentResolver(load_ontology("datasets/imdb_cmu/graph/ontology.yaml"))
+    return IntentResolver(load_ontology("datasets/imdb/graph/ontology.yaml"))
 
 
 class FakeStore:

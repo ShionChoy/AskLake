@@ -5,6 +5,6 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class LLMProvider(Protocol):
-    """Swappable LLM. Implementations: Anthropic (P1), Ollama (optional)."""
+    """Swappable LLM interface implemented by cloud providers and the test fake."""
 
     def complete(self, prompt: str, system: str | None = None) -> str: ...

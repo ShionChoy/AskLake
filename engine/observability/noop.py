@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 
 class NoopObservability:
-    """No-op metrics/trace sink. Replaced in P5."""
+    """No-op metrics and trace sink used when observability is disabled."""
 
     @contextmanager
     def span(self, name: str, **attrs) -> Iterator[None]:

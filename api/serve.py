@@ -42,14 +42,14 @@ from engine.semantic.semantic_model import load_semantic_layer
 from engine.semantic.value_index import build_value_index
 
 PARQUET_DIR = os.environ.get("ASKLAKE_PARQUET_DIR", "data/imdb/parquet")
-SEMANTIC_YAML = "datasets/imdb_cmu/semantic.yaml"
+SEMANTIC_YAML = "datasets/imdb/semantic.yaml"
 GRAPH_PATH = os.environ.get("ASKLAKE_GRAPH_PATH", "data/imdb/graph/triples.jsonl")
 GRAPH_BACKEND = os.environ.get("ASKLAKE_GRAPH_BACKEND", "memory").lower()
 NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.environ.get("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "")
-ONTOLOGY_YAML = "datasets/imdb_cmu/graph/ontology.yaml"
-GOVERNANCE_YAML = "datasets/imdb_cmu/governance.yaml"
+ONTOLOGY_YAML = "datasets/imdb/graph/ontology.yaml"
+GOVERNANCE_YAML = "datasets/imdb/governance.yaml"
 AUTH_CONFIG = os.environ.get("ASKLAKE_AUTH_CONFIG", "auth.yaml")
 
 

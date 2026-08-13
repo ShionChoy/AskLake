@@ -1,7 +1,3 @@
-# ─── Design / planning docs — keep LOCAL ONLY, never publish ───
-/docs/
-CLAUDE.md
-
 # ─── Secrets & environment ───
 .env
 .env.*
@@ -12,7 +8,7 @@ secrets/
 .secrets/
 /auth.yaml
 
-# ─── Raw / downloaded datasets & data-store volumes (never commit) ───
+# ─── Raw and generated datasets (never commit) ───
 /data/
 datasets/**/raw/
 datasets/**/*.tsv
@@ -22,10 +18,6 @@ datasets/**/*.parquet
 *.tsv
 *.tsv.gz
 *.parquet
-warehouse/
-minio-data/
-neo4j-data/
-qdrant-data/
 *.duckdb
 
 # ─── Python ───

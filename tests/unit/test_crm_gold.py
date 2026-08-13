@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datasets.crm_demo.source import build_parquet
+from datasets.crm.source import build_parquet
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 from engine.semantic.semantic_model import load_semantic_layer
 from eval.crm_gold import CRM_GOLD
@@ -14,7 +14,7 @@ def test_crm_gold_shape():
 
 
 def test_crm_semantic_layer_has_link_flags_and_minimal_fewshots():
-    layer = load_semantic_layer("datasets/crm_demo/semantic.yaml")
+    layer = load_semantic_layer("datasets/crm/semantic.yaml")
     links = {c.name: c.link for t in layer.tables for c in t.columns if c.link}
     assert links.get("status") == "categorical"
     assert links.get("region") == "categorical"

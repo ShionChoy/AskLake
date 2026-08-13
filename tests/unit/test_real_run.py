@@ -129,10 +129,10 @@ def test_eval_dataset_config_resolves_crm_and_imdb():
 
     imdb = eval_dataset_config("imdb")
     assert imdb["parquet_dir"].endswith("imdb/parquet")
-    assert imdb["semantic_yaml"].endswith("imdb_cmu/semantic.yaml")
+    assert imdb["semantic_yaml"].endswith("imdb/semantic.yaml")
     assert callable(imdb["gold"])
 
     crm = eval_dataset_config("crm")
     assert crm["parquet_dir"].endswith("crm/parquet")
-    assert crm["semantic_yaml"].endswith("crm_demo/semantic.yaml")
+    assert crm["semantic_yaml"].endswith("crm/semantic.yaml")
     assert callable(crm["gold"])
