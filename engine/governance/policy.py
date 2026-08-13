@@ -566,3 +566,31 @@ class PolicyGovernance:
             "max_rows": self._p.max_rows_for(role),
             **self._p.obligations_for(tables),
         }
+
+    def access_profile(self, role: str) -> dict[str, Any]:
+        """Return the caller-visible policy decision surface for one role.
+
+        Predicates themselves deliberately stay server-side: callers need to know which resources
+        are filtered or masked, but exposing policy SQL would unnecessarily couple clients to the
+        enforcement implementation.
+        """
+
+        rule = self._p.role(role)
+        return {
+            "policy_version": self._p.version,
+            "default_effect": self._p.default_effect,
+            "role": role,
+            "actions": sorted(rule.actions),
+            "tables": sorted(rule.tables),
+            "column_controls": [
+                {"column": column, "handling": handling}
+                for column, handling in sorted(rule.columns.items())
+                if handling != "allow"
+            ],
+            "row_filtered_tables": sorted(rule.row_security),
+            "graph_relations": sorted(self._p.graph_relations_for(role)),
+            "limits": {
+                "query_rows": self._p.max_rows_for(role),
+                "graph_triples": self._p.max_graph_triples_for(role),
+            },
+        }

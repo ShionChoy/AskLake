@@ -10,6 +10,7 @@ class Principal:
 
     user: str
     role: str
+    credential_id: str = ""
 
 
 @runtime_checkable

@@ -17,6 +17,7 @@ dependencies = [
     "prometheus-client>=0.20",
     "pyvis>=0.3.2",
     "sqlglot>=27,<29",
+    "pyjwt[crypto]>=2.13,<3",
 ]
 
 [project.optional-dependencies]

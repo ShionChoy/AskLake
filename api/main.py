@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import csv
+import io
 import uuid
 from collections.abc import Callable
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.deps import require_principal
@@ -32,6 +34,20 @@ class AskRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     question: str = Field(min_length=1, max_length=4_000)
+
+
+class ExportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sql: str = Field(min_length=1, max_length=20_000)
+
+
+def _csv_cell(value):
+    """Neutralize spreadsheet formulas without changing non-string result values."""
+
+    if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
 
 
 def create_app(
@@ -75,6 +91,43 @@ def create_app(
     def health() -> dict:
         return {"status": "ok", "service": "asklake"}
 
+    @app.get("/session")
+    def session(
+        request: Request,
+        principal: Principal = Depends(require_principal),  # noqa: B008
+    ) -> JSONResponse:
+        """Expose the effective server-side identity and its enforceable capabilities."""
+
+        profile_builder = getattr(governance, "access_profile", None)
+        profile = (
+            profile_builder(principal.role)
+            if profile_builder
+            else {
+                "role": principal.role,
+                "actions": [],
+                "tables": [],
+                "column_controls": [],
+                "row_filtered_tables": [],
+                "graph_relations": [],
+                "limits": {},
+            }
+        )
+        authenticated = bool(request.headers.get("Authorization"))
+        return JSONResponse(
+            content={
+                "principal": {
+                    "user": principal.user,
+                    "role": principal.role,
+                    "authenticated": authenticated,
+                    "authentication_method": getattr(app.state.authenticator, "method", "custom"),
+                    "credential_id": principal.credential_id,
+                },
+                "governance": profile,
+                "request_id": request.state.request_id,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
     @app.post("/query")
     def query(
         req: QueryRequest,
@@ -95,6 +148,7 @@ def create_app(
                 app.state.audit.write(
                     event="authorization",
                     user=principal.user,
+                    credential_id=principal.credential_id,
                     role=role,
                     action="raw_sql",
                     path="/query",
@@ -117,6 +171,7 @@ def create_app(
                 app.state.audit.write(
                     event="query",
                     user=principal.user,
+                    credential_id=principal.credential_id,
                     role=role,
                     action="raw_sql",
                     path="/query",
@@ -137,6 +192,7 @@ def create_app(
         app.state.audit.write(
             event="query",
             user=principal.user,
+            credential_id=principal.credential_id,
             role=role,
             action="raw_sql",
             path="/query",
@@ -152,6 +208,105 @@ def create_app(
             "governance": metadata(role, req.sql) if metadata else None,
             "request_id": request.state.request_id,
         }
+
+    @app.post("/export")
+    def export(
+        req: ExportRequest,
+        request: Request,
+        principal: Principal = Depends(require_principal),  # noqa: B008
+    ):
+        """Run a governed query and return a bounded, spreadsheet-safe CSV export."""
+
+        role = principal.role
+        export_governance = (
+            governance.for_action("export") if hasattr(governance, "for_action") else governance
+        )
+        try:
+            sql = export_governance.before_query(req.sql, role=role)
+            scope = getattr(export_governance, "scoped_backend", None)
+            governed_backend = scope(backend, role) if scope is not None else backend
+            result = governed_backend.run_sql(sql)
+            result = export_governance.after_result(result, role=role)
+        except GovernanceError as exc:
+            observability.event("export_denied", code=exc.code)
+            observability.event(f"access.{role}.blocked")
+            app.state.audit.write(
+                event="authorization",
+                user=principal.user,
+                credential_id=principal.credential_id,
+                role=role,
+                action="export",
+                path="/export",
+                decision="denied",
+                reason_code=exc.code,
+                request_id=request.state.request_id,
+                query_text=req.sql,
+            )
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={
+                    "error": str(exc),
+                    "code": exc.code,
+                    "request_id": request.state.request_id,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            observability.event("export_error", error_type=type(exc).__name__)
+            app.state.audit.write(
+                event="export",
+                user=principal.user,
+                credential_id=principal.credential_id,
+                role=role,
+                action="export",
+                path="/export",
+                decision="failed",
+                reason_code="export_failed",
+                request_id=request.state.request_id,
+                query_text=req.sql,
+            )
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "export failed",
+                    "code": "export_failed",
+                    "request_id": request.state.request_id,
+                },
+            )
+
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(result.columns)
+        writer.writerows([_csv_cell(value) for value in row] for row in result.rows)
+        metadata_builder = getattr(export_governance, "response_metadata", None)
+        metadata = metadata_builder(role, req.sql) if metadata_builder else {}
+        app.state.audit.write(
+            event="export",
+            user=principal.user,
+            credential_id=principal.credential_id,
+            role=role,
+            action="export",
+            path="/export",
+            decision="allowed",
+            row_count=len(result.rows),
+            request_id=request.state.request_id,
+            query_text=req.sql,
+        )
+        observability.event(f"access.{role}.allowed")
+        return Response(
+            content="\ufeff" + output.getvalue(),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Cache-Control": "no-store",
+                "Content-Disposition": (
+                    f'attachment; filename="asklake-{request.state.request_id}.csv"'
+                ),
+                "X-AskLake-Role": role,
+                "X-AskLake-Policy-Version": str(metadata.get("policy_version", "")),
+                "X-AskLake-Row-Count": str(len(result.rows)),
+                "X-AskLake-Licenses": ",".join(metadata.get("licenses", [])),
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
     @app.post("/ask")
     def ask(
@@ -169,6 +324,7 @@ def create_app(
             app.state.audit.write(
                 event="query",
                 user=principal.user,
+                credential_id=principal.credential_id,
                 role=role,
                 action="ask",
                 path="/ask",
@@ -209,6 +365,7 @@ def create_app(
                 app.state.audit.write(
                     event="authorization",
                     user=principal.user,
+                    credential_id=principal.credential_id,
                     role=role,
                     action="ask",
                     path="/ask",
@@ -230,6 +387,7 @@ def create_app(
         app.state.audit.write(
             event="query",
             user=principal.user,
+            credential_id=principal.credential_id,
             role=role,
             action="ask",
             path=rr.path,
@@ -254,7 +412,6 @@ def create_app(
         }
 
     if hasattr(observability, "registry"):
-        from fastapi.responses import Response
         from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
         @app.get("/metrics")

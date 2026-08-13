@@ -1,10 +1,20 @@
-# Copy to auth.yaml, generate a high-entropy token, then store only its SHA-256 digest here:
-#   uv run python -m engine.auth.static_token
-# The placeholder below is SHA-256("") and cannot authenticate because empty tokens are rejected.
+# Copy to auth.yaml. Generate a high-entropy token with the command below, deliver the `token`
+# once through a secrets manager, and store only `token_sha256` in this file:
+#   uv run python -m engine.auth.static_token generate
+# The placeholder digests below are non-credentials and must be replaced. Credential IDs are stable
+# audit/rotation identifiers; expiry timestamps are UTC.
 version: 2
 allow_anonymous: true
 anonymous_role: public
 credentials:
-  - token_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-    user: replace-me
+  - id: analyst-primary
+    token_sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+    user: analyst@example.com
     role: analyst
+    expires_at: "2027-01-01T00:00:00Z"
+  - id: steward-primary
+    token_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    user: steward@example.com
+    role: steward
+    expires_at: "2027-01-01T00:00:00Z"
+    disabled: true

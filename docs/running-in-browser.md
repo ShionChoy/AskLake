@@ -324,7 +324,9 @@ Neo4j lifecycle, persistence, backup, and shutdown are managed outside this repo
 |---|---|---|
 | GET | `/health` | `{"status":"ok"}` |
 | GET | `/info` | `{provider, model, path}` (default provider, or `(client-supplied)` when keyless) |
+| GET | `/session` | effective principal plus server-authorized actions, row/column controls, and limits |
 | POST | `/query` | governed raw SQL for `analyst`/`steward`: `{columns, rows, governance, request_id}` |
+| POST | `/export` | bounded audited CSV export for `steward`; applies the same SQL and role-view controls |
 | POST | `/ask` | NL→SQL: `{path, sql, columns, rows, chart_spec, narrative, governance, request_id}` |
 | POST | `/ask_trace` | same as `/ask` **plus** `{model, steps[], elapsed_ms}`; accepts optional `provider`/`model`/`api_key` in the body (the UI prefers this) |
 | GET | `/metrics` | Prometheus exposition (active because `ASKLAKE_OBSERVABILITY_BACKEND=prometheus`) |
@@ -338,6 +340,8 @@ Neo4j lifecycle, persistence, backup, and shutdown are managed outside this repo
 | `ASKLAKE_OBSERVABILITY_BACKEND` | API | `prometheus` enables the `/metrics` endpoint (default `noop`) |
 | `ASKLAKE_PARQUET_DIR` | API | Parquet location (default `data/imdb/parquet`) |
 | `ASKLAKE_AUTH_CONFIG` | API | hashed Bearer-token to role configuration |
+| `ASKLAKE_AUTH_MODE` | API | `static` for local/gateway deployments or `oidc` for direct JWT validation |
+| `ASKLAKE_OIDC_*` | API | pinned issuer/audience/JWKS/algorithm and external-role claim mapping |
 | `ASKLAKE_AUDIT_PATH` | API | owner-only rotating JSONL audit sink; queries are hashed |
 | `ASKLAKE_API_HOST` / `ASKLAKE_API_PORT` | API | bind host/port (default `0.0.0.0:8000`) |
 | `ASKLAKE_API_URL` | UI | which API the UI calls (default `http://localhost:8000`) |

@@ -12,6 +12,7 @@ The hermetic test app remains `api.main:create_app` (needs no key or data)."""
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from contextvars import ContextVar
@@ -24,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.deps import require_principal
 from api.main import create_app
+from engine.auth.oidc import OidcAuthenticator
 from engine.auth.static_token import StaticTokenAuthenticator
 from engine.governance.audit import AuditLog
 from engine.governance.graph import GovernedGraphPath
@@ -35,7 +37,7 @@ from engine.graph.ontology import load_ontology
 from engine.graph.persistence import load_store
 from engine.lakehouse.duckdb_backend import DuckDBBackend
 from engine.llm.factory import make_provider
-from engine.ports.auth import Principal
+from engine.ports.auth import Authenticator, Principal
 from engine.ports.llm import LLMProvider
 from engine.ports.storage import QueryResult, StorageBackend
 from engine.retrieval.agentic_sql_path import AgenticSqlPath
@@ -57,6 +59,15 @@ NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "")
 ONTOLOGY_YAML = "datasets/imdb/graph/ontology.yaml"
 GOVERNANCE_YAML = "datasets/imdb/governance.yaml"
 AUTH_CONFIG = os.environ.get("ASKLAKE_AUTH_CONFIG", "auth.yaml")
+AUTH_MODE = os.environ.get("ASKLAKE_AUTH_MODE", "static").lower()
+OIDC_ISSUER = os.environ.get("ASKLAKE_OIDC_ISSUER", "")
+OIDC_AUDIENCE = os.environ.get("ASKLAKE_OIDC_AUDIENCE", "")
+OIDC_JWKS_URL = os.environ.get("ASKLAKE_OIDC_JWKS_URL", "")
+OIDC_ROLE_MAPPING = os.environ.get("ASKLAKE_OIDC_ROLE_MAPPING", "")
+OIDC_ROLE_CLAIM = os.environ.get("ASKLAKE_OIDC_ROLE_CLAIM", "groups")
+OIDC_USER_CLAIM = os.environ.get("ASKLAKE_OIDC_USER_CLAIM", "preferred_username")
+OIDC_ALGORITHMS = os.environ.get("ASKLAKE_OIDC_ALGORITHMS", "RS256")
+OIDC_ALLOW_ANONYMOUS = os.environ.get("ASKLAKE_OIDC_ALLOW_ANONYMOUS", "false")
 AUDIT_PATH = os.environ.get("ASKLAKE_AUDIT_PATH", "data/audit/events.jsonl")
 
 
@@ -219,6 +230,41 @@ class _TracingGraphPath:
         return rr
 
 
+def _bool_setting(value: str, name: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized not in {"true", "false"}:
+        raise ValueError(f"{name} must be true or false")
+    return normalized == "true"
+
+
+def _build_authenticator(anonymous_role: str) -> Authenticator:
+    if AUTH_MODE == "static":
+        return (
+            StaticTokenAuthenticator.from_yaml(AUTH_CONFIG, anonymous_role=anonymous_role)
+            if AUTH_CONFIG and Path(AUTH_CONFIG).exists()
+            else StaticTokenAuthenticator({}, anonymous_role=anonymous_role)
+        )
+    if AUTH_MODE != "oidc":
+        raise ValueError("ASKLAKE_AUTH_MODE must be static or oidc")
+    try:
+        mapping = json.loads(OIDC_ROLE_MAPPING)
+    except json.JSONDecodeError as exc:
+        raise ValueError("ASKLAKE_OIDC_ROLE_MAPPING must be a JSON object") from exc
+    if not isinstance(mapping, dict):
+        raise ValueError("ASKLAKE_OIDC_ROLE_MAPPING must be a JSON object")
+    return OidcAuthenticator(
+        issuer=OIDC_ISSUER,
+        audience=OIDC_AUDIENCE,
+        jwks_url=OIDC_JWKS_URL,
+        role_mapping={str(key): str(value) for key, value in mapping.items()},
+        role_claim=OIDC_ROLE_CLAIM,
+        user_claim=OIDC_USER_CLAIM,
+        algorithms=tuple(item.strip() for item in OIDC_ALGORITHMS.split(",") if item.strip()),
+        allow_anonymous=_bool_setting(OIDC_ALLOW_ANONYMOUS, "ASKLAKE_OIDC_ALLOW_ANONYMOUS"),
+        anonymous_role=anonymous_role,
+    )
+
+
 def build_app(
     llm: LLMProvider | None = None,
     backend: StorageBackend | None = None,
@@ -246,14 +292,10 @@ def build_app(
     policy = load_policy(GOVERNANCE_YAML)
     governance = PolicyGovernance(policy, action="raw_sql")
 
-    authenticator = (
-        StaticTokenAuthenticator.from_yaml(AUTH_CONFIG, anonymous_role=policy.anonymous_role)
-        if AUTH_CONFIG and Path(AUTH_CONFIG).exists()
-        else StaticTokenAuthenticator({}, anonymous_role=policy.anonymous_role)
-    )
+    authenticator = _build_authenticator(policy.anonymous_role)
     unknown = authenticator.roles - set(policy.roles)
     if unknown:
-        raise ValueError(f"auth.yaml roles not in governance.yaml: {sorted(unknown)}")
+        raise ValueError(f"authentication roles not in governance.yaml: {sorted(unknown)}")
     if authenticator.anonymous_role and authenticator.anonymous_role not in policy.roles:
         raise ValueError("anonymous authentication role is not in governance.yaml")
     build_role_views(backend, policy)  # rls_<role> schemas of filtered/redacted views
@@ -529,6 +571,7 @@ def build_app(
             app.state.audit.write(
                 event="query",
                 user=principal.user,
+                credential_id=principal.credential_id,
                 role=role,
                 action=action,
                 path="/ask_trace",
@@ -595,6 +638,7 @@ def build_app(
             app.state.audit.write(
                 event="authorization",
                 user=principal.user,
+                credential_id=principal.credential_id,
                 role=role,
                 action="graph" if needs_graph and not needs_sql else "ask",
                 path="/ask_trace",
@@ -617,6 +661,7 @@ def build_app(
             app.state.audit.write(
                 event="query",
                 user=principal.user,
+                credential_id=principal.credential_id,
                 role=role,
                 action="ask",
                 path="/ask_trace",
@@ -640,6 +685,7 @@ def build_app(
         app.state.audit.write(
             event="query",
             user=principal.user,
+            credential_id=principal.credential_id,
             role=role,
             action="graph" if needs_graph and not needs_sql else "ask",
             path=rr.path,

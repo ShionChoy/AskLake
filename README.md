@@ -14,7 +14,8 @@ AskLake answers plain-English questions through two grounded retrieval paths —
 - **Interactive network view** — graph and fusion answers also render their triples as a draggable, zoomable pyvis network (relation-labeled edges, hubs sized by degree, source citations on hover) in a 🕸️ Network view expander beneath the table. Adjustable in-app: node size, layout spacing/density, and a freeze-layout toggle.
 - **Heuristic Router + Synthesizer** — routes structured questions to SQL, relational/narrative questions to the graph, and fuses both for cross-cutting queries.
 - **Production governance boundary** — deny-by-default action/table/column/graph authorization, adult-content row filtering, public-person field masking, AST-validated read-only SQL, hard result caps, license obligations, and persistent privacy-preserving audit events.
-- **Authenticated role-based access** — high-entropy Bearer tokens map to roles through SHA-256 digests in `auth.yaml`; missing credentials use the explicit anonymous role, while malformed or invalid credentials return HTTP 401. See *Access control & governance* below.
+- **Authenticated role-based access** — high-entropy Bearer tokens map to roles through SHA-256 digests in `auth.yaml`; credentials have stable rotation IDs, optional expiry/disable controls, and plaintext configurations are rejected. Missing credentials use the explicit anonymous role, while malformed, expired, disabled, or invalid credentials return HTTP 401.
+- **Visible governance control plane** — `/session` reports the effective server-resolved identity, actions, row/column controls, and hard limits; the UI gates unavailable operations instead of pretending they are usable. `steward` has a real audited, bounded, spreadsheet-safe CSV export workflow.
 - **Observability** — `PrometheusObservability` records LLM-call latency, SQL errors, and storage spans; opt-in via `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` which also exposes a `/metrics` endpoint.
 - **Bring-your-own key in the browser** — paste an API key and pick the provider/model right in the UI sidebar, then optionally save it to a local `0600` file for next time (or delete it). Credentials are sent per request and **never persisted server-side**; the server boots fine with no key at all.
 - **Port-and-adapter engine** — 7 ports (`LLMProvider`, `StorageBackend`, `SchemaProvider`, `RetrievalPath`, `AgentGraph` nodes, `GovernanceHook`, `Observability`) keep every component swappable without touching existing adapters.
@@ -128,9 +129,11 @@ Governance is enforced at the execution boundary from the versioned policy in
 `datasets/imdb/governance.yaml`:
 
 - **Authentication** — Bearer tokens are stored as SHA-256 digests in `auth.yaml` (copy
-  `auth.example.yaml`; generate a digest with `uv run python -m engine.auth.static_token`). Missing
-  credentials use the explicitly configured anonymous role. A malformed or invalid credential is
-  rejected with HTTP 401; it never silently becomes an anonymous request.
+  `auth.example.yaml`; issue one with `uv run python -m engine.auth.static_token generate`). Each
+  credential has a stable ID and may be expired or disabled for rotation. Plaintext/legacy files
+  fail startup. Missing credentials use the explicitly configured anonymous role. A malformed,
+  expired, disabled, or invalid credential is rejected with HTTP 401; it never silently becomes an
+  anonymous request.
 - **Deny-by-default authorization** — each role independently grants actions (`ask`, `raw_sql`,
   `graph`, `export`), tables, columns, row predicates, graph relations, and result caps. `public`
   can ask governed questions but cannot call the raw SQL endpoint; `analyst` can run bounded raw
@@ -152,10 +155,17 @@ Governance is enforced at the execution boundary from the versioned policy in
   emitted as structured JSON. Query text is hashed by default rather than logged; a rotating
   owner-only JSONL sink is enabled with `ASKLAKE_AUDIT_PATH`. API responses expose applicable
   license notices and policy version.
+- **Operator-visible decisions** — `GET /session` exposes only the safe, effective policy surface
+  (identity, actions, governed resources, masked/denied columns, filtered table names, and limits),
+  never the server-side row predicates. The Streamlit UI renders this profile and handles 401/403
+  responses explicitly. `POST /export` is restricted to `steward`, uses the same role views and
+  AST controls, applies the role result cap, neutralizes spreadsheet formulas, and is audited.
 
 Static bearer tokens are suitable for a local deployment or a service behind an identity-aware
-gateway. A multi-tenant internet deployment should replace this authenticator through the existing
-`Authenticator` port with OIDC/JWT validation and ship audit events to an immutable external sink.
+gateway. A direct multi-tenant deployment can set `ASKLAKE_AUTH_MODE=oidc` to validate asymmetric
+OIDC/JWT signatures through the provider JWKS, with pinned issuer/audience/algorithm, required
+time/subject claims, exact external-role mapping, and fail-closed ambiguous roles. Audit events
+should still be shipped to an immutable external sink.
 The complete decision model and operator workflow are documented in
 [`docs/governance.md`](docs/governance.md).
 
@@ -226,6 +236,8 @@ make clean       # removes build artifacts and temporary files
 | `ANTHROPIC_API_KEY` + `ASKLAKE_LLM_PROVIDER=anthropic` | use Claude instead of DeepSeek |
 | `ASKLAKE_PARQUET_DIR` | built parquet location (default `data/imdb/parquet`) |
 | `ASKLAKE_AUTH_CONFIG` | path to the hashed bearer-token→role configuration |
+| `ASKLAKE_AUTH_MODE` | `static` (local/gateway) or `oidc` (direct JWT validation) |
+| `ASKLAKE_OIDC_*` | issuer, audience, JWKS, claim names, asymmetric algorithms, and external→internal role mapping |
 | `ASKLAKE_AUDIT_PATH` | persistent JSONL audit path (query content is hashed by default) |
 | `ASKLAKE_OBSERVABILITY_BACKEND=prometheus` | enable `/metrics` Prometheus exposition |
 | `ASKLAKE_GRAPH_BACKEND` | knowledge-graph backend: `memory` (default) or `neo4j` |
